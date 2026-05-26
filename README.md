@@ -23,3 +23,10 @@ python3 p2p_node.py --port 8002 --pubkey 0xNODE_B --server-ip 140.112.30.188 --s
    👥 Online: ['0xNODE_A', '0xNODE_B']
 📤 [Relay] Sent to 0xNODE_A
 ```
+
+## TODO
+* 串接 API / JSON 格式
+* 傳輸安全 (EE2E / mTLS / Public Key)
+* 檔案權限（暫時人工分類）
+* Agent
+* 改 P2P 
