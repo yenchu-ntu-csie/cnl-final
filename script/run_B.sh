@@ -38,7 +38,7 @@ fi
 # 把 A 加進白名單（之後 A 回訊也會被信任）
 python3 agents.py add "$PEER_PUBKEY" --name A
 
-echo "📨 送給 A: ${PEER_PUBKEY:0:16}…　訊息：「$MESSAGE」"
+echo "📨 送給 A: ${PEER_PUBKEY:0:16}…　訊息：「${MESSAGE}」"
 echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}"
 echo
 
