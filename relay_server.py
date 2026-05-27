@@ -57,7 +57,9 @@ class RelayServer:
                         }) + "\n"
                         self.peers[to].write(deliver.encode())
                         await self.peers[to].drain()
-                        print(f"   📦 {pubkey} → {to}")
+                        enc = msg.get("packet", {}).get("payload", {}).get("enc")
+                        seal = "🔒 payload encrypted (relay 看不懂內容)" if enc else "⚠️ plaintext payload"
+                        print(f"   📦 {str(pubkey)[:12]}… → {str(to)[:12]}…  | {seal}")
                     else:
                         err = json.dumps({"type": "ERROR", "reason": "peer_offline"}) + "\n"
                         writer.write(err.encode())

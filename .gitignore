@@ -1,0 +1,6 @@
+# 私鑰絕對不要進版控
+*.key
+linkedout_*.key
+
+__pycache__/
+*.pyc
