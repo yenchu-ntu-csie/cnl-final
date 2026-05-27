@@ -259,6 +259,76 @@ def build_request_payload(args) -> Optional[Dict]:
     )
 
 
+# ==========================================
+#   REPL：互動式輸入（人類在這裡打字下指令給對方 AI）
+# ==========================================
+_REPL_HELP = (
+    "指令：\n"
+    "  <任意文字>            送 ask 到對方的 AI（預設模式）\n"
+    "  /ask <text>           同上，顯式版本\n"
+    "  /read <path>          讀對方 share/ 內的檔（如 read-only/notes.md）\n"
+    "  /append <path> <text> 追加到對方 share/read&append/ 內的檔\n"
+    "  /list [path]          列出對方 share/ 的結構\n"
+    "  /help                 顯示這個說明\n"
+    "  /quit, /exit, Ctrl-D  離開\n"
+)
+
+
+def _parse_repl_line(line: str) -> Optional[Dict]:
+    """把使用者輸入的一行轉成 REQUEST payload；不合法回 None。"""
+    line = line.strip()
+    if not line:
+        return None
+    if line.startswith("/ask "):
+        return app_layer.make_request("ask", query=line[5:].strip())
+    if line.startswith("/read "):
+        return app_layer.make_request("read", path=line[6:].strip())
+    if line.startswith("/append "):
+        rest = line[len("/append "):].strip()
+        path, _, content = rest.partition(" ")
+        if not path or not content:
+            print("⚠️  /append 需要 <path> <text>")
+            return None
+        return app_layer.make_request("append", path=path,
+                                       content=interpret_escapes(content))
+    if line == "/list" or line.startswith("/list "):
+        path = line[len("/list"):].strip()
+        return app_layer.make_request("list", path=path)
+    if line.startswith("/"):
+        print(f"⚠️  未知指令：{line.split()[0]}（試試 /help）")
+        return None
+    # 沒有斜線開頭 → 預設為 ask
+    return app_layer.make_request("ask", query=line)
+
+
+async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str):
+    """讓使用者持續輸入問題 / 指令送給對方；回應由背景 run_relay → handle_incoming 印出。"""
+    print()
+    print(f"💬 [REPL] 已連到 relay，現在和 {peer_label}({peer_pubkey[:8]}…) 對話。")
+    print(_REPL_HELP)
+    while True:
+        try:
+            line = await asyncio.to_thread(input, "linkedout> ")
+        except (EOFError, KeyboardInterrupt):
+            print("\n👋 bye")
+            return
+        if line.strip() in ("/quit", "/exit"):
+            print("👋 bye")
+            return
+        if line.strip() == "/help":
+            print(_REPL_HELP)
+            continue
+        req = _parse_repl_line(line)
+        if req is None:
+            continue
+        packet = node.build_packet(peer_pubkey, "REQUEST", req)
+        detail = req.get("path") or req.get("query", "")
+        print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
+        await node.send_via_relay(peer_pubkey, packet)
+        # 等一下再印下一個 prompt，讓回應有機會先顯示出來（不阻塞，只是體感）
+        await asyncio.sleep(0.05)
+
+
 async def main(args):
     priv = e2ee.load_or_create_identity(args.key_file)
     app_layer.ensure_share(args.share)   # 確保 share/read-only 與 share/read&append 存在
@@ -292,7 +362,22 @@ async def main(args):
         relay_task = asyncio.create_task(node.run_relay(args.server_ip, args.server_port))
         await asyncio.sleep(1)
 
-        if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
+        peer_set = args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN"
+
+        if args.repl:
+            if not peer_set:
+                print("⚠️  REPL 模式需要 --peer-pubkey（要跟誰對話）")
+            else:
+                await asyncio.sleep(0.5)
+                peer_label = (agent_list.get(args.peer_pubkey) or {}).get("name") or "peer"
+                repl_task = asyncio.create_task(repl_loop(node, args.peer_pubkey, peer_label))
+                done, pending = await asyncio.wait(
+                    {relay_task, repl_task}, return_when=asyncio.FIRST_COMPLETED,
+                )
+                for t in pending:
+                    t.cancel()
+                return
+        elif peer_set:
             await asyncio.sleep(1)
             req = build_request_payload(args)
             if req:
@@ -347,6 +432,7 @@ if __name__ == "__main__":
     parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list / ask 可省略")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容（支援 \\n 換行、\\t Tab）")
     parser.add_argument("--query",       type=str, default=None,        help="ask 要問對方 AI 的自然語言問題")
+    parser.add_argument("--repl",        action="store_true",           help="進入互動模式：在 prompt 持續輸入問題/指令（需 --peer-pubkey）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
 
     # 直連模式（同一個 LAN）

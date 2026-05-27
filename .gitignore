@@ -12,6 +12,8 @@ DESIGN.md
 __pycache__/
 *.pyc
 .conda/
+.venv/
+venv/
 
 # 本地 AI 模型（用 ollama 管理，住在 ~/.ollama/，本目錄不該出現）
 # 仍為了保險加上以下副檔名與資料夾，避免不小心 commit 上去
