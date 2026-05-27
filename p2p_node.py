@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Set
 
 import e2ee
+import agents
 
 # ==========================================
 # 1. 資料模型 (照你們的定義，微調以適應 Pydantic v2)
@@ -221,7 +222,9 @@ def get_lan_ip() -> str:
 async def main(args):
     priv = e2ee.load_or_create_identity(args.key_file)
 
-    trust: Set[str] = set()
+    # 白名單來源：agents.json（持久化 agent list）為主，--trust / --peer-pubkey 為臨時追加
+    agent_list = agents.load(args.agents_file)
+    trust: Set[str] = set(agent_list.keys())
     if args.trust:
         trust.update(t.strip() for t in args.trust.split(",") if t.strip())
     if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
@@ -234,9 +237,11 @@ async def main(args):
     print(f"🦉 [LinkedOut] Node '{label}'")
     print(f"🔑 My public key（分享給朋友，加入對方 agent list）:\n   {node.my_pubkey}")
     if trust:
-        print(f"🤝 信任白名單: {[t[:16] + '…' for t in trust]}")
+        names = [f"{(agent_list.get(pk) or {}).get('name') or pk[:8]}({pk[:8]}…)" for pk in trust]
+        print(f"🤝 信任白名單（{len(trust)} 人，來自 {args.agents_file}）: {names}")
     else:
-        print("⚠️  未設定信任白名單（--trust）→ 將拒收所有人；請至少加入要對話的 peer")
+        print(f"⚠️  白名單是空的（{args.agents_file} 沒有任何人）→ 將拒收所有訊息")
+        print("   用 `python3 agents.py add <對方公鑰> --name X` 加入後再啟動")
     print("=" * 60)
 
     # ── Relay 模式（封包經 server 轉發，跨不同 WiFi）─────────
@@ -279,7 +284,8 @@ if __name__ == "__main__":
     parser.add_argument("--port",        type=int, required=True,       help="本機監聽 port（例：8001）")
     parser.add_argument("--key-file",    type=str, default=None,        help="X25519 金鑰檔（預設 linkedout_<port>.key）")
     parser.add_argument("--name",        type=str, default=None,        help="顯示用暱稱（純美觀，預設取公鑰前綴）")
-    parser.add_argument("--trust",       type=str, default=None,        help="信任的寄件者公鑰，逗號分隔（白名單）")
+    parser.add_argument("--agents-file", type=str, default="agents.json", help="agent list / 信任白名單檔（預設 agents.json）")
+    parser.add_argument("--trust",       type=str, default=None,        help="額外臨時信任的寄件者公鑰，逗號分隔（不寫檔）")
 
     # Relay 模式（跨不同 WiFi）
     parser.add_argument("--server-ip",   type=str, default=None,        help="[Relay] Server IP")

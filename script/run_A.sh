@@ -2,13 +2,14 @@
 # ============================================================
 # 電腦 A —— 收訊方 (receiver)
 #
-# 用法：
-#   1) 第一次：直接執行，印出 A 的公鑰，傳給 B
-#        ./run_A.sh
-#   2) 拿到 B 的公鑰後：把它當參數傳入，正式啟動
-#        ./run_A.sh <B的公鑰>
+# 接收方會接受 agents.json（白名單）裡「所有人」傳來的訊息，
+# 啟動時不用指定對應誰。
 #
-# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_A.sh <B的公鑰>
+# 用法：
+#   ./run_A.sh                 # 直接啟動，接受白名單裡所有人
+#   ./run_A.sh <某人的公鑰>     # 先把這把公鑰加進白名單（持久化），再啟動
+#
+# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_A.sh
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 切到專案根目錄（e2ee.py / p2p_node.py 所在）
@@ -22,22 +23,20 @@ KEYFILE="linkedout_${PORT}.key"
 # ===== 顯示自己的公鑰 =====
 MY_PUB=$(python3 -c "import e2ee; print(e2ee.public_hex(e2ee.load_or_create_identity('$KEYFILE')))")
 echo "============================================================"
-echo "🔑 這台 (A) 的公鑰 —— 複製給 B："
+echo "🔑 這台 (A) 的公鑰 —— 複製給對方："
 echo "   $MY_PUB"
 echo "============================================================"
 
-PEER_PUBKEY="${1:-}"
-if [ -z "$PEER_PUBKEY" ]; then
-  echo "ℹ️  還沒收到 B 的公鑰。"
-  echo "   把上面的公鑰傳給 B，拿到 B 的公鑰後再執行："
-  echo "      ./run_A.sh <B的公鑰>"
-  exit 0
+# 若有帶參數，先把對方公鑰加進白名單（之後就記住了，不用每次帶）
+if [ -n "${1:-}" ]; then
+  python3 agents.py add "$1" --name "${2:-peer}"
 fi
 
-echo "🤝 信任的寄件者 (B): ${PEER_PUBKEY:0:16}…"
-echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}　等待 B 的加密訊息…"
+# 顯示目前白名單
+python3 agents.py list
+echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}　等待白名單成員的加密訊息…"
 echo
 
+# 啟動：接受 agents.json 白名單裡所有人，不指定對應誰
 exec python3 -u p2p_node.py --port "$PORT" --name A \
-  --server-ip "$RELAY_IP" --server-port "$RELAY_PORT" \
-  --trust "$PEER_PUBKEY"
+  --server-ip "$RELAY_IP" --server-port "$RELAY_PORT"

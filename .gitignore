@@ -2,5 +2,9 @@
 *.key
 linkedout_*.key
 
+# 各機器自己的 agent list / 白名單（內含對方公鑰，屬個人設定）
+agents.json
+
+DESIGN.md
 __pycache__/
 *.pyc
