@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import json
+import re
 import socket
 import uuid
 import time
@@ -227,12 +228,20 @@ def get_lan_ip() -> str:
 # ==========================================
 # 5. 主程式
 # ==========================================
+_ESCAPES = {"\\n": "\n", "\\t": "\t", "\\r": "\r", "\\\\": "\\"}
+
+def interpret_escapes(s: Optional[str]) -> Optional[str]:
+    r"""把命令列輸入的 \n \t \r 轉成真正的換行/Tab（UTF-8 安全；\\ 可保留字面反斜線）。"""
+    if not s:
+        return s
+    return re.sub(r"\\[ntr\\]", lambda m: _ESCAPES[m.group()], s)
+
 def build_request_payload(args) -> Optional[Dict]:
     """把 CLI 參數組成 REQUEST payload（實際組裝在 app_layer.make_request）。"""
     if args.op in ("read", "append") and not args.path:
         print("⚠️  read/append 需要 --path（要操作哪個檔）")
         return None
-    return app_layer.make_request(args.op, args.path or "", args.content)
+    return app_layer.make_request(args.op, args.path or "", interpret_escapes(args.content))
 
 
 async def main(args):
@@ -318,7 +327,7 @@ if __name__ == "__main__":
     # 應用層：要對對方做的檔案操作
     parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list"], help="操作：read / append / list")
     parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list 可省略")
-    parser.add_argument("--content",     type=str, default=None,        help="append 的內容")
+    parser.add_argument("--content",     type=str, default=None,        help="append 的內容（支援 \\n 換行、\\t Tab）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
 
     # 直連模式（同一個 LAN）

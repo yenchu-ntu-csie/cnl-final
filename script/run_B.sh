@@ -12,6 +12,7 @@
 #   ./run_B.sh <A的公鑰> list   "read&append"                  # 看某個子目錄
 #   ./run_B.sh <A的公鑰> read   "read-only/notes.md"           # 讀 A 的唯讀區
 #   ./run_B.sh <A的公鑰> append "read&append/log.md" "一行字"   # 追加到 A 的可寫區
+#   ./run_B.sh <A的公鑰> append "read&append/log.md" "第一行\n第二行\n"  # \n = 換行
 #
 # Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> list
 # ============================================================
