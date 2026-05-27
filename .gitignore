@@ -11,3 +11,4 @@ vault/
 DESIGN.md
 __pycache__/
 *.pyc
+.conda/
