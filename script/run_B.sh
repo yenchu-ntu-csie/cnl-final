@@ -8,10 +8,12 @@
 #
 # 用法（注意 read&append 含 & 要用引號）：
 #   ./run_B.sh                                                 # 只印出自己的公鑰
+#   ./run_B.sh <A的公鑰> list                                  # 看 A 的 share/ 結構
+#   ./run_B.sh <A的公鑰> list   "read&append"                  # 看某個子目錄
 #   ./run_B.sh <A的公鑰> read   "read-only/notes.md"           # 讀 A 的唯讀區
 #   ./run_B.sh <A的公鑰> append "read&append/log.md" "一行字"   # 追加到 A 的可寫區
 #
-# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> read "read-only/notes.md"
+# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> list
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 切到專案根目錄（e2ee.py / p2p_node.py 所在）
@@ -30,11 +32,17 @@ echo "   $MY_PUB"
 echo "============================================================"
 
 PEER_PUBKEY="${1:-}"
-OP="${2:-read}"
-FILEPATH="${3:-read-only/notes.md}"
+OP="${2:-list}"
+# list 預設列整個 share/（path 留空）；read/append 預設 read-only/notes.md
+if [ "$OP" = "list" ]; then
+  FILEPATH="${3:-}"
+else
+  FILEPATH="${3:-read-only/notes.md}"
+fi
 CONTENT="${4:-}"
 if [ -z "$PEER_PUBKEY" ]; then
   echo "ℹ️  還沒收到 A 的公鑰。把上面的公鑰傳給 A，拿到 A 的公鑰後再執行："
+  echo "      ./run_B.sh <A的公鑰> list"
   echo "      ./run_B.sh <A的公鑰> read   \"read-only/notes.md\""
   echo "      ./run_B.sh <A的公鑰> append \"read&append/log.md\" \"要追加的內容\""
   exit 0

@@ -229,10 +229,10 @@ def get_lan_ip() -> str:
 # ==========================================
 def build_request_payload(args) -> Optional[Dict]:
     """把 CLI 參數組成 REQUEST payload（實際組裝在 app_layer.make_request）。"""
-    if not args.path:
-        print("⚠️  傳送需要 --path（要操作哪個檔）")
+    if args.op in ("read", "append") and not args.path:
+        print("⚠️  read/append 需要 --path（要操作哪個檔）")
         return None
-    return app_layer.make_request(args.op, args.path, args.content)
+    return app_layer.make_request(args.op, args.path or "", args.content)
 
 
 async def main(args):
@@ -316,8 +316,8 @@ if __name__ == "__main__":
     parser.add_argument("--peer-pubkey", type=str, default="0xUNKNOWN", help="對方的公鑰（加密目標）")
 
     # 應用層：要對對方做的檔案操作
-    parser.add_argument("--op",          type=str, default="read", choices=["read", "append"], help="操作：read / append")
-    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）")
+    parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list"], help="操作：read / append / list")
+    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list 可省略")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
 
