@@ -1,7 +1,6 @@
 import asyncio
 import argparse
 import json
-import os
 import socket
 import uuid
 import time
@@ -10,6 +9,7 @@ from typing import List, Dict, Optional, Set
 
 import e2ee
 import agents
+import app_layer
 
 # ==========================================
 # 1. 資料模型 (照你們的定義，微調以適應 Pydantic v2)
@@ -29,19 +29,7 @@ class ProtocolPacket(BaseModel):
     payload: Dict          # E2EE 模式下這裡裝的是密文 envelope，relay 看不懂
     signature: str
 
-# ── 應用層 payload（解密後的明文，type="REQUEST"/"RESPONSE"）──────
-# 路徑安全 / 權限之後會用另一個白名單處理，這裡先專注於把 JSON 送到對方。
-class FileRequest(BaseModel):
-    id: str                              # 用來對應回應
-    op: str                              # "read" | "append"
-    path: str                            # 要操作的檔案
-    content: Optional[str] = None        # append 才需要
-
-class FileResponse(BaseModel):
-    id: str                              # 對應的 request id
-    ok: bool                             # 是否成功
-    content: Optional[str] = None        # read 成功時回傳整個檔案
-    error: Optional[str] = None          # 失敗原因（not_found / bad_op / io_error）
+# 應用層 payload（FileRequest / FileResponse）的 schema 與處理在 app_layer.py
 
 # ==========================================
 # 2. 網路層實作 (Network Layer) + E2EE
@@ -109,9 +97,16 @@ class P2PNode:
         print(f"   🔓 [Decrypted] from {sender[:16]}… ✔ 寄件者已驗證")
 
         if packet.type == "REQUEST":
-            await self.handle_request(sender, app_payload)
+            # 應用層處理 → 拿回要回傳的 RESPONSE payload → 加密送回原寄件者
+            resp_payload = app_layer.handle_request(app_payload, self.vault)
+            if resp_payload is not None:
+                pkt = self.build_packet(sender, "RESPONSE", resp_payload)
+                if self.srv_writer:
+                    await self.send_via_relay(sender, pkt)
+                else:
+                    print("   ⚠️ 直連模式尚未接回應通道（結果已在上面顯示）")
         elif packet.type == "RESPONSE":
-            self.handle_response(app_payload)
+            app_layer.handle_response(app_payload)
         else:
             print(f"   ⚠️ 未知封包類型: {packet.type}")
 
@@ -215,68 +210,8 @@ class P2PNode:
         print(f"📤 [Relay] Sent to {to_pubkey[:16]}…（🔒 已加密，relay 無法解讀）")
         return True
 
-    # ==========================================
-    # 4. 應用層：檔案 read / append 的 request / response
-    # ==========================================
-    def _do_file_op(self, req: FileRequest) -> FileResponse:
-        """在 vault 目錄內執行 read / append（路徑安全與權限之後另外做）。"""
-        full = os.path.join(self.vault, req.path)
-        try:
-            if req.op == "read":
-                with open(full, encoding="utf-8") as f:
-                    return FileResponse(id=req.id, ok=True, content=f.read())
-            elif req.op == "append":
-                os.makedirs(os.path.dirname(full) or self.vault, exist_ok=True)
-                with open(full, "a", encoding="utf-8") as f:
-                    f.write(req.content or "")
-                return FileResponse(id=req.id, ok=True)
-            else:
-                return FileResponse(id=req.id, ok=False, error="bad_op")
-        except FileNotFoundError:
-            return FileResponse(id=req.id, ok=False, error="not_found")
-        except Exception as e:
-            return FileResponse(id=req.id, ok=False, error=f"io_error: {e}")
-
-    async def handle_request(self, sender: str, payload: Dict):
-        """收到 REQUEST → 執行檔案操作 → 把 RESPONSE 加密送回原寄件者。"""
-        try:
-            req = FileRequest.model_validate(payload)
-        except Exception as e:
-            print(f"   ⚠️ 無效 request: {e}")
-            return
-
-        print(f"   📂 [Request] id={req.id} op={req.op} path={req.path}")
-        resp = self._do_file_op(req)
-        print(f"   ↩️  [Response] id={resp.id} ok={resp.ok}"
-              + (f" error={resp.error}" if resp.error else ""))
-
-        pkt = self.build_packet(sender, "RESPONSE", resp.model_dump())
-        if self.srv_writer:
-            await self.send_via_relay(sender, pkt)
-        else:
-            print("   ⚠️ 直連模式尚未接回應通道（結果已在上面顯示）")
-
-    def handle_response(self, payload: Dict):
-        """收到 RESPONSE → 顯示結果。"""
-        try:
-            resp = FileResponse.model_validate(payload)
-        except Exception as e:
-            print(f"   ⚠️ 無效 response: {e}")
-            return
-
-        if not resp.ok:
-            print(f"   ❌ [Reply id={resp.id}] 失敗：{resp.error}")
-        elif resp.content is not None:
-            print(f"   ✅ [Reply id={resp.id}] read 成功，檔案內容：")
-            print("   ┌────────────────────────────")
-            for line in (resp.content.splitlines() or [""]):
-                print(f"   │ {line}")
-            print("   └────────────────────────────")
-        else:
-            print(f"   ✅ [Reply id={resp.id}] append 成功")
-
 # ==========================================
-# 5. 工具：取得本機 LAN IP
+# 4. 工具：取得本機 LAN IP
 # ==========================================
 def get_lan_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -290,17 +225,14 @@ def get_lan_ip() -> str:
     return ip
 
 # ==========================================
-# 6. 主程式
+# 5. 主程式
 # ==========================================
 def build_request_payload(args) -> Optional[Dict]:
-    """把 CLI 參數組成 FileRequest payload（含自動產生的 id）。"""
+    """把 CLI 參數組成 REQUEST payload（實際組裝在 app_layer.make_request）。"""
     if not args.path:
         print("⚠️  傳送需要 --path（要操作哪個檔）")
         return None
-    req = {"id": uuid.uuid4().hex[:8], "op": args.op, "path": args.path}
-    if args.op == "append":
-        req["content"] = args.content or ""
-    return req
+    return app_layer.make_request(args.op, args.path, args.content)
 
 
 async def main(args):
