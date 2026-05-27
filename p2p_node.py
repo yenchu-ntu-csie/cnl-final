@@ -39,7 +39,8 @@ class P2PNode:
     def __init__(self, port: int, priv: "e2ee.X25519PrivateKey",
                  trust: Optional[Set[str]] = None, host: str = "0.0.0.0",
                  share: str = "share", owner: str = "Anonymous",
-                 agent_meta: Optional[Dict[str, dict]] = None):
+                 agent_meta: Optional[Dict[str, dict]] = None,
+                 model: Optional[str] = None):
         self.host = host
         self.port = port
         self.priv = priv
@@ -48,6 +49,7 @@ class P2PNode:
         self.share = share                       # 分享資料夾（read-only / read&append，權限在 app_layer 檢查）
         self.owner = owner                       # 給本機 AI 介紹自己身分用（ask op）
         self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, ...}，未來放 ACL 用
+        self.model = model                       # 給 ask op 用的 Ollama 模型；None 走 env/auto
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -106,6 +108,7 @@ class P2PNode:
             resp_payload = await app_layer.handle_request(
                 app_payload, self.share,
                 owner=self.owner, sender_pubkey=sender, tier=tier,
+                model=self.model,
             )
             if resp_payload is not None:
                 pkt = self.build_packet(sender, "RESPONSE", resp_payload)
@@ -342,7 +345,8 @@ async def main(args):
         trust.add(args.peer_pubkey)   # 要對話的 peer 自動視為信任
 
     node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share,
-                   owner=args.name or "Anonymous", agent_meta=agent_list)
+                   owner=args.name or "Anonymous", agent_meta=agent_list,
+                   model=args.model)
 
     label = args.name or node.my_pubkey[:16]
     print("=" * 60)
@@ -434,6 +438,7 @@ if __name__ == "__main__":
     parser.add_argument("--query",       type=str, default=None,        help="ask 要問對方 AI 的自然語言問題")
     parser.add_argument("--repl",        action="store_true",           help="進入互動模式：在 prompt 持續輸入問題/指令（需 --peer-pubkey）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
+    parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 
     # 直連模式（同一個 LAN）
     parser.add_argument("--peer-ip",     type=str, default=None,        help="[直連] 對方 IP")

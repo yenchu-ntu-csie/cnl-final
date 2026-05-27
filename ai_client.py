@@ -14,13 +14,51 @@ LinkedOut AI client — 本地 Ollama 包裝層。
 
 import asyncio
 import json
+import os
 import urllib.request
 import urllib.error
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
-OLLAMA_HOST = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5:14b"   # 已存在於本機 ollama list
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 REQUEST_TIMEOUT = 180            # 秒（含模型載入）
+
+# 模型選擇優先順序：
+#   1) 呼叫端顯式傳入 (model="...")
+#   2) 環境變數 LINKEDOUT_MODEL（隊員各自設定）
+#   3) 環境變數 OLLAMA_MODEL（如果隊員已用過 ollama 的慣例）
+#   4) 本機 ollama 已安裝的第一個模型（/api/tags 查到的）
+#   5) 沒任何模型 → raise，並印出可執行的指引（建議 ollama pull ...）
+#
+# 不在程式碼裡 hardcode 任何特定模型名稱，避免「我電腦有但隊員沒有」的情況。
+_MODEL_ENV_VARS = ("LINKEDOUT_MODEL", "OLLAMA_MODEL")
+
+
+def _list_installed_models() -> List[str]:
+    """問 ollama /api/tags 看本機有哪些 model；失敗則回空 list。"""
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return [m.get("name") for m in (data.get("models") or []) if m.get("name")]
+    except Exception:
+        return []
+
+
+def resolve_model(explicit: Optional[str] = None) -> str:
+    """決定這次要用哪個 model；找不到任何可用 model 就 raise。"""
+    if explicit:
+        return explicit
+    for var in _MODEL_ENV_VARS:
+        val = os.environ.get(var)
+        if val:
+            return val
+    installed = _list_installed_models()
+    if installed:
+        return installed[0]
+    raise RuntimeError(
+        f"No Ollama model available at {OLLAMA_HOST}. "
+        f"請在本機 `ollama pull <model>` 安裝一個（例如 qwen2.5:7b 或 dolphin3），"
+        f"或設定環境變數 LINKEDOUT_MODEL=<model>。"
+    )
 
 _SYSTEM_TEMPLATE = (
     "You are {owner}'s LinkedOut local agent. "
@@ -51,10 +89,11 @@ def _build_messages(owner: str, peer_pubkey: str, tier: str,
     ]
 
 
-def _call_sync(model: str, messages: list) -> str:
+def _call_sync(model: Optional[str], messages: list) -> str:
     """同步呼叫 Ollama /api/chat。回傳 model 的純文字輸出；失敗則 raise。"""
+    chosen = resolve_model(model)
     body = json.dumps({
-        "model": model,
+        "model": chosen,
         "messages": messages,
         "stream": False,
         "options": {"temperature": 0.3},
@@ -82,11 +121,14 @@ def _call_sync(model: str, messages: list) -> str:
 
 async def answer(owner: str, peer_pubkey: str, tier: str, query_text: str,
                  ctx_chunks: Optional[Iterable[str]] = None,
-                 model: str = DEFAULT_MODEL) -> str:
+                 model: Optional[str] = None) -> str:
     """
     讓本地 Ollama 為 owner 回答來自 peer_pubkey 的 query。
     回傳模型的純文字答覆（結構由上層協定層 FileResponse 負責）。
     呼叫 ollama 失敗時會 raise RuntimeError，由上層轉成 FileResponse.error。
+
+    model=None 時走 resolve_model() 的優先順序：
+        LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數 > 本機已安裝的第一個。
     """
     messages = _build_messages(owner, peer_pubkey, tier, query_text, ctx_chunks)
     return await asyncio.to_thread(_call_sync, model, messages)
@@ -96,7 +138,12 @@ async def answer(owner: str, peer_pubkey: str, tier: str, query_text: str,
 if __name__ == "__main__":
     import sys
     q = sys.argv[1] if len(sys.argv) > 1 else "Briefly: what is end-to-end encryption?"
-    print(f"🤖 Asking local Ollama ({DEFAULT_MODEL}) — query: {q!r}")
+    try:
+        chosen = resolve_model()
+    except RuntimeError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+    print(f"🤖 Asking local Ollama ({chosen}) — query: {q!r}")
     out = asyncio.run(answer(
         owner="Alice",
         peer_pubkey="0123456789abcdef" * 4,

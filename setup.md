@@ -27,7 +27,7 @@ python3 -c "import pydantic, cryptography; print('ok')"
 
 ## 3. Ollama
 
-Install, start the daemon, pull a model. Anything in the `qwen2.5` / `qwen3` / `gemma` / `dolphin3` families works; `ai_client.DEFAULT_MODEL` is `qwen2.5:14b`.
+Install, start the daemon, pull any one chat model. **The code does not hardcode a model name** — each teammate picks what fits their machine.
 
 ```bash
 # macOS: starts on login. If not running:
@@ -35,21 +35,43 @@ brew services start ollama
 # or just:
 ollama serve   # foreground
 
-# Pull the default model (~9 GB)
-ollama pull qwen2.5:14b
+# Pull whatever fits your RAM / disk. Examples:
+ollama pull qwen2.5:7b      # ~4.7 GB, runs on most laptops
+ollama pull dolphin3        # ~4.9 GB, fastest
+ollama pull qwen2.5:14b     # ~9 GB, better quality
+ollama pull gemma4:26b      # ~17 GB, best quality if you have the RAM
 
 # Verify
 ollama list
 curl -s http://localhost:11434/api/tags | head
 ```
 
+### Model selection (group project: each teammate sets their own)
+
+`ai_client.resolve_model()` picks the model in this order:
+
+1. `--model <name>` passed to `p2p_node.py` (explicit per-run override)
+2. `LINKEDOUT_MODEL` environment variable
+3. `OLLAMA_MODEL` environment variable
+4. The first model returned by `ollama list` (auto-detect)
+5. Raises with an actionable message ("run `ollama pull ...`")
+
+Recommended: each teammate sets `LINKEDOUT_MODEL` in their shell rc once and forgets about it:
+
+```bash
+# in ~/.zshrc or ~/.bashrc
+export LINKEDOUT_MODEL=qwen2.5:7b   # whatever you pulled
+```
+
+Set `OLLAMA_HOST=http://...:11434` if your Ollama daemon is on another machine.
+
 Smoke-test the AI client without any networking:
 
 ```bash
-python3 ai_client.py "What is end-to-end encryption?"
+.venv/bin/python ai_client.py "What is end-to-end encryption?"
 ```
 
-You should see a one- or two-sentence prose answer.
+It prints the model it resolved to (`🤖 Asking local Ollama (<model>)`) followed by the answer.
 
 > Don't push the model file. Models live in `~/.ollama/models/` outside this repo. The repo's `.gitignore` already excludes `*.gguf`, `*.safetensors`, `*.bin`, `models/`, `.ollama/` defensively.
 
@@ -201,7 +223,8 @@ The relay log proves the property: it forwards bytes and never sees plaintext.
 | `🚫 [Decrypt failed]` | wrong pubkey in `--peer-pubkey`, or relay tampered metadata | re-check pubkey; AAD binds the route metadata so any tampering trips this |
 | `path_denied` / `not_shared` | path tried to escape `share/` or wasn't under a zone | use `read-only/<file>` or `read&append/<file>` |
 | `permission_denied` on append | tried to append into `read-only/` | only `read&append/` accepts appends |
-| `ai_error: ...` in RESPONSE | Ollama daemon down or model missing | `ollama pull qwen2.5:14b` |
+| `ai_error: No Ollama model available …` | No model installed locally | `ollama pull <name>` (any chat model), or set `LINKEDOUT_MODEL` |
+| `ai_error: ollama unreachable …` | Ollama daemon not running | `ollama serve` / `brew services start ollama` |
 
 ## 11. Files you'll see locally (none committed)
 

@@ -194,11 +194,11 @@ def _collect_ask_context(share: str) -> List[str]:
 
 
 async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
-                  tier: str) -> FileResponse:
+                  tier: str, model: Optional[str] = None) -> FileResponse:
     if not req.query:
         return FileResponse(id=req.id, ok=False, error="missing_query")
     ctx = _collect_ask_context(share)
-    print(f"   🧠 [Ask] '{req.query[:60]}'… ctx_chunks={len(ctx)}")
+    print(f"   🧠 [Ask] '{req.query[:60]}'… ctx_chunks={len(ctx)} model={model or 'auto'}")
     try:
         text = await ai_client.answer(
             owner=owner,
@@ -206,6 +206,7 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
             tier=tier,
             query_text=req.query,
             ctx_chunks=ctx,
+            model=model,
         )
     except Exception as e:
         return FileResponse(id=req.id, ok=False, error=f"ai_error: {e}")
@@ -214,7 +215,8 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
 
 async def handle_request(payload: Dict, share: str, *,
                           owner: str = "Anonymous", sender_pubkey: str = "",
-                          tier: str = "Common") -> Optional[Dict]:
+                          tier: str = "Common",
+                          model: Optional[str] = None) -> Optional[Dict]:
     """解析 REQUEST → 權限/路徑檢查 → 執行 → 回傳要送回去的 RESPONSE payload。
     解析失敗回傳 None（呼叫端就不用回任何東西）。"""
     try:
@@ -229,7 +231,8 @@ async def handle_request(payload: Dict, share: str, *,
     if req.op == "list":
         resp = _do_list(req, share)
     elif req.op == "ask":
-        resp = await _do_ask(req, share, owner=owner, sender_pubkey=sender_pubkey, tier=tier)
+        resp = await _do_ask(req, share, owner=owner, sender_pubkey=sender_pubkey,
+                              tier=tier, model=model)
     else:
         full, err = _check(req, share)
         resp = FileResponse(id=req.id, ok=False, error=err) if err else _do_file_op(req, full)

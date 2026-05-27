@@ -27,10 +27,8 @@ Today RESPONSE only works in relay mode. Direct LAN mode prints the result local
 - [ ] Either: add `--peer-ip/--peer-port` to packet header so receiver can dial back, or
 - [ ] Keep the inbound `handle_client` socket open and write RESPONSE back on the same connection.
 
-### 4. CLI surface for model choice
-`DEFAULT_MODEL = "qwen2.5:14b"` is hardcoded in [ai_client.py](ai_client.py).
-- [ ] Add `--model` CLI arg in `p2p_node.py`, plumb through to `ai_client.answer`.
-- [ ] Optional: `OLLAMA_MODEL` env var as fallback.
+### 4. ~~CLI surface for model choice~~ ✅ done
+`resolve_model()` in [ai_client.py](ai_client.py) now resolves in order: explicit `--model` → `LINKEDOUT_MODEL` → `OLLAMA_MODEL` → first installed. No hardcoded model name anywhere.
 
 ## Decisions parked (revisit when full picture is clearer)
 
