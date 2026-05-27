@@ -3,13 +3,14 @@
 # 電腦 B —— 送訊方 (sender)
 #
 # E2EE 必須知道對方公鑰才能加密，所以送訊方一定要指定要送給誰。
+# 對 A 的 vault 做 read / append，A 會把結果加密回傳。
 #
 # 用法：
-#   ./run_B.sh                          # 只印出自己的公鑰
-#   ./run_B.sh <A的公鑰>                 # 送預設訊息給 A
-#   ./run_B.sh <A的公鑰> "想送的訊息"     # 送指定訊息給 A
+#   ./run_B.sh                                   # 只印出自己的公鑰
+#   ./run_B.sh <A的公鑰> read  notes.md          # 讀 A 的 vault/notes.md
+#   ./run_B.sh <A的公鑰> append notes.md "一行字"  # 在 A 的 vault/notes.md 後面追加
 #
-# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰>
+# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> read notes.md
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 切到專案根目錄（e2ee.py / p2p_node.py 所在）
@@ -28,20 +29,23 @@ echo "   $MY_PUB"
 echo "============================================================"
 
 PEER_PUBKEY="${1:-}"
-MESSAGE="${2:-Hi from B over relay}"
+OP="${2:-read}"
+FILEPATH="${3:-notes.md}"
+CONTENT="${4:-}"
 if [ -z "$PEER_PUBKEY" ]; then
   echo "ℹ️  還沒收到 A 的公鑰。把上面的公鑰傳給 A，拿到 A 的公鑰後再執行："
-  echo "      ./run_B.sh <A的公鑰> \"想送的訊息\""
+  echo "      ./run_B.sh <A的公鑰> read notes.md"
+  echo "      ./run_B.sh <A的公鑰> append notes.md \"要追加的內容\""
   exit 0
 fi
 
-# 把 A 加進白名單（之後 A 回訊也會被信任）
+# 把 A 加進白名單（之後 A 回訊 / RESPONSE 也會被信任）
 python3 agents.py add "$PEER_PUBKEY" --name A
 
-echo "📨 送給 A: ${PEER_PUBKEY:0:16}…　訊息：「${MESSAGE}」"
+echo "📨 對 A (${PEER_PUBKEY:0:16}…) 執行：op=${OP} path=${FILEPATH}"
 echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}"
 echo
 
 exec python3 -u p2p_node.py --port "$PORT" --name B \
   --server-ip "$RELAY_IP" --server-port "$RELAY_PORT" \
-  --peer-pubkey "$PEER_PUBKEY" --message "$MESSAGE"
+  --peer-pubkey "$PEER_PUBKEY" --op "$OP" --path "$FILEPATH" --content "$CONTENT"

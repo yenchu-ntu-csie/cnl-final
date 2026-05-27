@@ -5,6 +5,9 @@ linkedout_*.key
 # 各機器自己的 agent list / 白名單（內含對方公鑰，屬個人設定）
 agents.json
 
+# 各機器自己的檔案庫（read/append 的目標）
+vault/
+
 DESIGN.md
 __pycache__/
 *.pyc

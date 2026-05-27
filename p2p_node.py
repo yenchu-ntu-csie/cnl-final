@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import json
+import os
 import socket
 import uuid
 import time
@@ -28,17 +29,33 @@ class ProtocolPacket(BaseModel):
     payload: Dict          # E2EE 模式下這裡裝的是密文 envelope，relay 看不懂
     signature: str
 
+# ── 應用層 payload（解密後的明文，type="REQUEST"/"RESPONSE"）──────
+# 路徑安全 / 權限之後會用另一個白名單處理，這裡先專注於把 JSON 送到對方。
+class FileRequest(BaseModel):
+    id: str                              # 用來對應回應
+    op: str                              # "read" | "append"
+    path: str                            # 要操作的檔案
+    content: Optional[str] = None        # append 才需要
+
+class FileResponse(BaseModel):
+    id: str                              # 對應的 request id
+    ok: bool                             # 是否成功
+    content: Optional[str] = None        # read 成功時回傳整個檔案
+    error: Optional[str] = None          # 失敗原因（not_found / bad_op / io_error）
+
 # ==========================================
 # 2. 網路層實作 (Network Layer) + E2EE
 # ==========================================
 class P2PNode:
     def __init__(self, port: int, priv: "e2ee.X25519PrivateKey",
-                 trust: Optional[Set[str]] = None, host: str = "0.0.0.0"):
+                 trust: Optional[Set[str]] = None, host: str = "0.0.0.0",
+                 vault: str = "vault"):
         self.host = host
         self.port = port
         self.priv = priv
         self.my_pubkey = e2ee.public_hex(priv)   # 身分 = 真實 X25519 公鑰
         self.trust: Set[str] = trust or set()    # 信任白名單（允許的寄件者公鑰）
+        self.vault = vault                       # 檔案操作根目錄（路徑安全之後另做）
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -90,7 +107,13 @@ class P2PNode:
             return
 
         print(f"   🔓 [Decrypted] from {sender[:16]}… ✔ 寄件者已驗證")
-        await self.mock_p6_routing(packet, app_payload)
+
+        if packet.type == "REQUEST":
+            await self.handle_request(sender, app_payload)
+        elif packet.type == "RESPONSE":
+            self.handle_response(app_payload)
+        else:
+            print(f"   ⚠️ 未知封包類型: {packet.type}")
 
     # ── Socket Server（直連模式用）────────────────────────
     async def start_server(self):
@@ -193,14 +216,64 @@ class P2PNode:
         return True
 
     # ==========================================
-    # 4. 模擬路由層 (Mock Routing)
+    # 4. 應用層：檔案 read / append 的 request / response
     # ==========================================
-    async def mock_p6_routing(self, packet: ProtocolPacket, app_payload: Dict):
-        """模擬 P6 收到（已解密的）封包後的反應。"""
-        if packet.type == "QUERY":
-            print("   🧠 [Mock AI] 正在解析 Query... 假裝思考了 2 秒")
-            await asyncio.sleep(2)
-            print(f"   🧠 [Mock AI] 回應 Payload: {app_payload}")
+    def _do_file_op(self, req: FileRequest) -> FileResponse:
+        """在 vault 目錄內執行 read / append（路徑安全與權限之後另外做）。"""
+        full = os.path.join(self.vault, req.path)
+        try:
+            if req.op == "read":
+                with open(full, encoding="utf-8") as f:
+                    return FileResponse(id=req.id, ok=True, content=f.read())
+            elif req.op == "append":
+                os.makedirs(os.path.dirname(full) or self.vault, exist_ok=True)
+                with open(full, "a", encoding="utf-8") as f:
+                    f.write(req.content or "")
+                return FileResponse(id=req.id, ok=True)
+            else:
+                return FileResponse(id=req.id, ok=False, error="bad_op")
+        except FileNotFoundError:
+            return FileResponse(id=req.id, ok=False, error="not_found")
+        except Exception as e:
+            return FileResponse(id=req.id, ok=False, error=f"io_error: {e}")
+
+    async def handle_request(self, sender: str, payload: Dict):
+        """收到 REQUEST → 執行檔案操作 → 把 RESPONSE 加密送回原寄件者。"""
+        try:
+            req = FileRequest.model_validate(payload)
+        except Exception as e:
+            print(f"   ⚠️ 無效 request: {e}")
+            return
+
+        print(f"   📂 [Request] id={req.id} op={req.op} path={req.path}")
+        resp = self._do_file_op(req)
+        print(f"   ↩️  [Response] id={resp.id} ok={resp.ok}"
+              + (f" error={resp.error}" if resp.error else ""))
+
+        pkt = self.build_packet(sender, "RESPONSE", resp.model_dump())
+        if self.srv_writer:
+            await self.send_via_relay(sender, pkt)
+        else:
+            print("   ⚠️ 直連模式尚未接回應通道（結果已在上面顯示）")
+
+    def handle_response(self, payload: Dict):
+        """收到 RESPONSE → 顯示結果。"""
+        try:
+            resp = FileResponse.model_validate(payload)
+        except Exception as e:
+            print(f"   ⚠️ 無效 response: {e}")
+            return
+
+        if not resp.ok:
+            print(f"   ❌ [Reply id={resp.id}] 失敗：{resp.error}")
+        elif resp.content is not None:
+            print(f"   ✅ [Reply id={resp.id}] read 成功，檔案內容：")
+            print("   ┌────────────────────────────")
+            for line in (resp.content.splitlines() or [""]):
+                print(f"   │ {line}")
+            print("   └────────────────────────────")
+        else:
+            print(f"   ✅ [Reply id={resp.id}] append 成功")
 
 # ==========================================
 # 5. 工具：取得本機 LAN IP
@@ -219,6 +292,17 @@ def get_lan_ip() -> str:
 # ==========================================
 # 6. 主程式
 # ==========================================
+def build_request_payload(args) -> Optional[Dict]:
+    """把 CLI 參數組成 FileRequest payload（含自動產生的 id）。"""
+    if not args.path:
+        print("⚠️  傳送需要 --path（要操作哪個檔）")
+        return None
+    req = {"id": uuid.uuid4().hex[:8], "op": args.op, "path": args.path}
+    if args.op == "append":
+        req["content"] = args.content or ""
+    return req
+
+
 async def main(args):
     priv = e2ee.load_or_create_identity(args.key_file)
 
@@ -230,7 +314,7 @@ async def main(args):
     if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
         trust.add(args.peer_pubkey)   # 要對話的 peer 自動視為信任
 
-    node = P2PNode(port=args.port, priv=priv, trust=trust)
+    node = P2PNode(port=args.port, priv=priv, trust=trust, vault=args.vault)
 
     label = args.name or node.my_pubkey[:16]
     print("=" * 60)
@@ -252,8 +336,11 @@ async def main(args):
 
         if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
             await asyncio.sleep(1)
-            packet = node.build_packet(args.peer_pubkey, "QUERY", {"query_text": args.message})
-            await node.send_via_relay(args.peer_pubkey, packet)
+            req = build_request_payload(args)
+            if req:
+                packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
+                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} path={req['path']}")
+                await node.send_via_relay(args.peer_pubkey, packet)
 
         await relay_task
 
@@ -272,8 +359,11 @@ async def main(args):
                 print("⚠️  E2EE 需要 --peer-pubkey（對方的公鑰）才能加密")
                 return
             await asyncio.sleep(2)
-            packet = node.build_packet(args.peer_pubkey, "QUERY", {"query_text": args.message})
-            await node.send_packet(args.peer_ip, args.peer_port, packet)
+            req = build_request_payload(args)
+            if req:
+                packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
+                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} path={req['path']}")
+                await node.send_packet(args.peer_ip, args.peer_port, packet)
 
         while True:
             await asyncio.sleep(3600)
@@ -291,7 +381,12 @@ if __name__ == "__main__":
     parser.add_argument("--server-ip",   type=str, default=None,        help="[Relay] Server IP")
     parser.add_argument("--server-port", type=int, default=9000,        help="[Relay] Server port（預設 9000）")
     parser.add_argument("--peer-pubkey", type=str, default="0xUNKNOWN", help="對方的公鑰（加密目標）")
-    parser.add_argument("--message",     type=str, default="Hello!",    help="測試封包內容")
+
+    # 應用層：要對對方做的檔案操作
+    parser.add_argument("--op",          type=str, default="read", choices=["read", "append"], help="操作：read / append")
+    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 vault/）")
+    parser.add_argument("--content",     type=str, default=None,        help="append 的內容")
+    parser.add_argument("--vault",       type=str, default="vault",     help="本機檔案操作根目錄（預設 vault/）")
 
     # 直連模式（同一個 LAN）
     parser.add_argument("--peer-ip",     type=str, default=None,        help="[直連] 對方 IP")
