@@ -32,8 +32,13 @@ if [ -n "${1:-}" ]; then
   python3 agents.py add "$1" --name "${2:-peer}"
 fi
 
+# 準備分享資料夾：share/read-only（對方只能讀）、share/read&append（對方可讀可追加）
+mkdir -p "share/read-only" "share/read&append"
+[ -f "share/read-only/notes.md" ] || printf 'LinkedOut 共享筆記（read-only）\n第一行\n' > "share/read-only/notes.md"
+
 # 顯示目前白名單
 python3 agents.py list
+echo "📁 分享資料夾 share/：read-only/（唯讀）、read&append/（可追加）"
 echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}　等待白名單成員的加密訊息…"
 echo
 

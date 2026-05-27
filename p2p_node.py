@@ -37,13 +37,13 @@ class ProtocolPacket(BaseModel):
 class P2PNode:
     def __init__(self, port: int, priv: "e2ee.X25519PrivateKey",
                  trust: Optional[Set[str]] = None, host: str = "0.0.0.0",
-                 vault: str = "vault"):
+                 share: str = "share"):
         self.host = host
         self.port = port
         self.priv = priv
         self.my_pubkey = e2ee.public_hex(priv)   # 身分 = 真實 X25519 公鑰
         self.trust: Set[str] = trust or set()    # 信任白名單（允許的寄件者公鑰）
-        self.vault = vault                       # 檔案操作根目錄（路徑安全之後另做）
+        self.share = share                       # 分享資料夾（read-only / read&append，權限在 app_layer 檢查）
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -98,7 +98,7 @@ class P2PNode:
 
         if packet.type == "REQUEST":
             # 應用層處理 → 拿回要回傳的 RESPONSE payload → 加密送回原寄件者
-            resp_payload = app_layer.handle_request(app_payload, self.vault)
+            resp_payload = app_layer.handle_request(app_payload, self.share)
             if resp_payload is not None:
                 pkt = self.build_packet(sender, "RESPONSE", resp_payload)
                 if self.srv_writer:
@@ -237,6 +237,7 @@ def build_request_payload(args) -> Optional[Dict]:
 
 async def main(args):
     priv = e2ee.load_or_create_identity(args.key_file)
+    app_layer.ensure_share(args.share)   # 確保 share/read-only 與 share/read&append 存在
 
     # 白名單來源：agents.json（持久化 agent list）為主，--trust / --peer-pubkey 為臨時追加
     agent_list = agents.load(args.agents_file)
@@ -246,7 +247,7 @@ async def main(args):
     if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
         trust.add(args.peer_pubkey)   # 要對話的 peer 自動視為信任
 
-    node = P2PNode(port=args.port, priv=priv, trust=trust, vault=args.vault)
+    node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share)
 
     label = args.name or node.my_pubkey[:16]
     print("=" * 60)
@@ -316,9 +317,9 @@ if __name__ == "__main__":
 
     # 應用層：要對對方做的檔案操作
     parser.add_argument("--op",          type=str, default="read", choices=["read", "append"], help="操作：read / append")
-    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 vault/）")
+    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容")
-    parser.add_argument("--vault",       type=str, default="vault",     help="本機檔案操作根目錄（預設 vault/）")
+    parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
 
     # 直連模式（同一個 LAN）
     parser.add_argument("--peer-ip",     type=str, default=None,        help="[直連] 對方 IP")

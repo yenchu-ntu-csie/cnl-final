@@ -3,14 +3,15 @@
 # 電腦 B —— 送訊方 (sender)
 #
 # E2EE 必須知道對方公鑰才能加密，所以送訊方一定要指定要送給誰。
-# 對 A 的 vault 做 read / append，A 會把結果加密回傳。
+# 對 A 的 share/ 做 read / append，A 會把結果加密回傳。
+# path 要含 zone：read-only/...（只能讀）或 read&append/...（可讀可追加）
 #
-# 用法：
-#   ./run_B.sh                                   # 只印出自己的公鑰
-#   ./run_B.sh <A的公鑰> read  notes.md          # 讀 A 的 vault/notes.md
-#   ./run_B.sh <A的公鑰> append notes.md "一行字"  # 在 A 的 vault/notes.md 後面追加
+# 用法（注意 read&append 含 & 要用引號）：
+#   ./run_B.sh                                                 # 只印出自己的公鑰
+#   ./run_B.sh <A的公鑰> read   "read-only/notes.md"           # 讀 A 的唯讀區
+#   ./run_B.sh <A的公鑰> append "read&append/log.md" "一行字"   # 追加到 A 的可寫區
 #
-# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> read notes.md
+# Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_B.sh <A的公鑰> read "read-only/notes.md"
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 切到專案根目錄（e2ee.py / p2p_node.py 所在）
@@ -30,12 +31,12 @@ echo "============================================================"
 
 PEER_PUBKEY="${1:-}"
 OP="${2:-read}"
-FILEPATH="${3:-notes.md}"
+FILEPATH="${3:-read-only/notes.md}"
 CONTENT="${4:-}"
 if [ -z "$PEER_PUBKEY" ]; then
   echo "ℹ️  還沒收到 A 的公鑰。把上面的公鑰傳給 A，拿到 A 的公鑰後再執行："
-  echo "      ./run_B.sh <A的公鑰> read notes.md"
-  echo "      ./run_B.sh <A的公鑰> append notes.md \"要追加的內容\""
+  echo "      ./run_B.sh <A的公鑰> read   \"read-only/notes.md\""
+  echo "      ./run_B.sh <A的公鑰> append \"read&append/log.md\" \"要追加的內容\""
   exit 0
 fi
 
