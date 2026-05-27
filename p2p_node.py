@@ -38,13 +38,16 @@ class ProtocolPacket(BaseModel):
 class P2PNode:
     def __init__(self, port: int, priv: "e2ee.X25519PrivateKey",
                  trust: Optional[Set[str]] = None, host: str = "0.0.0.0",
-                 share: str = "share"):
+                 share: str = "share", owner: str = "Anonymous",
+                 agent_meta: Optional[Dict[str, dict]] = None):
         self.host = host
         self.port = port
         self.priv = priv
         self.my_pubkey = e2ee.public_hex(priv)   # 身分 = 真實 X25519 公鑰
         self.trust: Set[str] = trust or set()    # 信任白名單（允許的寄件者公鑰）
         self.share = share                       # 分享資料夾（read-only / read&append，權限在 app_layer 檢查）
+        self.owner = owner                       # 給本機 AI 介紹自己身分用（ask op）
+        self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, ...}，未來放 ACL 用
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -99,7 +102,11 @@ class P2PNode:
 
         if packet.type == "REQUEST":
             # 應用層處理 → 拿回要回傳的 RESPONSE payload → 加密送回原寄件者
-            resp_payload = app_layer.handle_request(app_payload, self.share)
+            tier = (self.agent_meta.get(sender) or {}).get("tier", "Common")
+            resp_payload = await app_layer.handle_request(
+                app_payload, self.share,
+                owner=self.owner, sender_pubkey=sender, tier=tier,
+            )
             if resp_payload is not None:
                 pkt = self.build_packet(sender, "RESPONSE", resp_payload)
                 if self.srv_writer:
@@ -241,7 +248,15 @@ def build_request_payload(args) -> Optional[Dict]:
     if args.op in ("read", "append") and not args.path:
         print("⚠️  read/append 需要 --path（要操作哪個檔）")
         return None
-    return app_layer.make_request(args.op, args.path or "", interpret_escapes(args.content))
+    if args.op == "ask" and not args.query:
+        print("⚠️  ask 需要 --query（要問對方 AI 什麼問題）")
+        return None
+    return app_layer.make_request(
+        args.op,
+        args.path or "",
+        interpret_escapes(args.content),
+        query=args.query,
+    )
 
 
 async def main(args):
@@ -256,7 +271,8 @@ async def main(args):
     if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
         trust.add(args.peer_pubkey)   # 要對話的 peer 自動視為信任
 
-    node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share)
+    node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share,
+                   owner=args.name or "Anonymous", agent_meta=agent_list)
 
     label = args.name or node.my_pubkey[:16]
     print("=" * 60)
@@ -281,7 +297,8 @@ async def main(args):
             req = build_request_payload(args)
             if req:
                 packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
-                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} path={req['path']}")
+                detail = req.get("path") or req.get("query", "")
+                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
                 await node.send_via_relay(args.peer_pubkey, packet)
 
         await relay_task
@@ -304,7 +321,8 @@ async def main(args):
             req = build_request_payload(args)
             if req:
                 packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
-                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} path={req['path']}")
+                detail = req.get("path") or req.get("query", "")
+                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
                 await node.send_packet(args.peer_ip, args.peer_port, packet)
 
         while True:
@@ -325,9 +343,10 @@ if __name__ == "__main__":
     parser.add_argument("--peer-pubkey", type=str, default="0xUNKNOWN", help="對方的公鑰（加密目標）")
 
     # 應用層：要對對方做的檔案操作
-    parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list"], help="操作：read / append / list")
-    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list 可省略")
+    parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list", "ask"], help="操作：read / append / list / ask")
+    parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list / ask 可省略")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容（支援 \\n 換行、\\t Tab）")
+    parser.add_argument("--query",       type=str, default=None,        help="ask 要問對方 AI 的自然語言問題")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
 
     # 直連模式（同一個 LAN）

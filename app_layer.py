@@ -32,6 +32,8 @@ from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel
 
+import ai_client
+
 # 兩個分享區的資料夾名稱（要改名改這裡即可）
 ZONE_READONLY = "read-only"
 ZONE_APPEND = "read&append"
@@ -40,9 +42,10 @@ ZONE_APPEND = "read&append"
 # ── 應用層 JSON schema（解密後的明文）──────────────────────
 class FileRequest(BaseModel):
     id: str                              # 用來對應回應
-    op: str                              # "read" | "append" | "list"
-    path: str = ""                       # 相對 share/ 的路徑；list 可留空表示整個 share
+    op: str                              # "read" | "append" | "list" | "ask"
+    path: str = ""                       # 相對 share/ 的路徑；list 可留空；ask 不需要
     content: Optional[str] = None        # append 才需要
+    query: Optional[str] = None          # ask 才需要：要問對方 AI 的自然語言問題
 
 
 class FileResponse(BaseModel):
@@ -50,6 +53,7 @@ class FileResponse(BaseModel):
     ok: bool                             # 是否成功
     content: Optional[str] = None        # read 成功時回傳整個檔案
     entries: Optional[List[str]] = None  # list 成功時回傳路徑清單（資料夾結尾帶 /）
+    answer: Optional[str] = None         # ask 成功時回傳 LLM 的純文字答覆
     error: Optional[str] = None          # path_denied / not_shared / permission_denied / not_found / bad_op / io_error
 
 
@@ -61,13 +65,16 @@ def ensure_share(share: str) -> None:
 
 
 # ── 送訊方：組裝 REQUEST payload ───────────────────────────
-def make_request(op: str, path: str = "", content: Optional[str] = None) -> Dict:
-    """組一個 REQUEST payload（自動產生 id）。read 不帶 content；list 可不帶 path。"""
+def make_request(op: str, path: str = "", content: Optional[str] = None,
+                 query: Optional[str] = None) -> Dict:
+    """組一個 REQUEST payload（自動產生 id）。
+       read 不帶 content；list 可不帶 path；ask 用 query 帶問題。"""
     req = FileRequest(
         id=uuid.uuid4().hex[:8],
         op=op,
         path=path or "",
         content=(content or "") if op == "append" else None,
+        query=query if op == "ask" else None,
     )
     return req.model_dump(exclude_none=True)
 
@@ -155,7 +162,59 @@ def _do_list(req: FileRequest, share: str) -> FileResponse:
     return FileResponse(id=req.id, ok=True, entries=entries)
 
 
-def handle_request(payload: Dict, share: str) -> Optional[Dict]:
+# ── 收訊方：ask（讓本地 Ollama 回答對方的問題）─────────────
+# 對方既然在白名單裡，預設讓 LLM 看到整個 share/ 作為 context（兩個 zone 都包含）。
+# 注意：不是把整個 share/ 回傳給對方，只是給 LLM 當參考；最終只回 LLM 的 answer。
+_ASK_CTX_LIMIT = 50_000   # 防止 context 過大爆炸（單位 bytes）
+
+def _collect_ask_context(share: str) -> List[str]:
+    """蒐集 share/ 底下所有文字檔當 LLM 的 context chunks（簡易版 RAG）。"""
+    chunks: List[str] = []
+    total = 0
+    share_root = os.path.realpath(share)
+    if not os.path.isdir(share_root):
+        return chunks
+    for root, _, files in os.walk(share_root):
+        for name in sorted(files):
+            if name.startswith("."):
+                continue
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, share_root)
+            try:
+                with open(full, encoding="utf-8") as f:
+                    body = f.read()
+            except (UnicodeDecodeError, OSError):
+                continue   # 跳過非文字檔
+            chunk = f"--- {rel} ---\n{body}"
+            if total + len(chunk) > _ASK_CTX_LIMIT:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+    return chunks
+
+
+async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
+                  tier: str) -> FileResponse:
+    if not req.query:
+        return FileResponse(id=req.id, ok=False, error="missing_query")
+    ctx = _collect_ask_context(share)
+    print(f"   🧠 [Ask] '{req.query[:60]}'… ctx_chunks={len(ctx)}")
+    try:
+        text = await ai_client.answer(
+            owner=owner,
+            peer_pubkey=sender_pubkey,
+            tier=tier,
+            query_text=req.query,
+            ctx_chunks=ctx,
+        )
+    except Exception as e:
+        return FileResponse(id=req.id, ok=False, error=f"ai_error: {e}")
+    return FileResponse(id=req.id, ok=True, answer=text)
+
+
+async def handle_request(payload: Dict, share: str, *,
+                          owner: str = "Anonymous", sender_pubkey: str = "",
+                          tier: str = "Common") -> Optional[Dict]:
     """解析 REQUEST → 權限/路徑檢查 → 執行 → 回傳要送回去的 RESPONSE payload。
     解析失敗回傳 None（呼叫端就不用回任何東西）。"""
     try:
@@ -164,20 +223,28 @@ def handle_request(payload: Dict, share: str) -> Optional[Dict]:
         print(f"   ⚠️ 無效 request: {e}")
         return None
 
-    print(f"   📂 [Request] id={req.id} op={req.op} path={req.path or '(share 根目錄)'}")
+    op_label = req.query[:40] + "…" if req.op == "ask" and req.query else (req.path or "(share 根目錄)")
+    print(f"   📂 [Request] id={req.id} op={req.op} {op_label}")
 
     if req.op == "list":
         resp = _do_list(req, share)
+    elif req.op == "ask":
+        resp = await _do_ask(req, share, owner=owner, sender_pubkey=sender_pubkey, tier=tier)
     else:
         full, err = _check(req, share)
         resp = FileResponse(id=req.id, ok=False, error=err) if err else _do_file_op(req, full)
 
     if resp.ok:
-        extra = f" ({len(resp.entries)} 項)" if resp.entries is not None else ""
+        if resp.entries is not None:
+            extra = f" ({len(resp.entries)} 項)"
+        elif resp.answer is not None:
+            extra = " (AI 回應)"
+        else:
+            extra = ""
         print(f"   ↩️  [Response] id={resp.id} ok=True{extra}")
     else:
         print(f"   ⛔ [Denied] id={resp.id} {resp.error}")
-    return resp.model_dump()
+    return resp.model_dump(exclude_none=True)
 
 
 # ── 送訊方：顯示收到的 RESPONSE ────────────────────────────
@@ -206,12 +273,19 @@ def handle_response(payload: Dict) -> None:
         for line in (resp.content.splitlines() or [""]):
             print(f"   │ {line}")
         print("   └────────────────────────────")
+    elif resp.answer is not None:
+        print(f"   🤖 [Reply id={resp.id}] AI 回應：")
+        print("   ┌────────────────────────────")
+        for line in (resp.answer.splitlines() or [""]):
+            print(f"   │ {line}")
+        print("   └────────────────────────────")
     else:
         print(f"   ✅ [Reply id={resp.id}] append 成功")
 
 
 # ── 自我測試 ──────────────────────────────────────────────
 if __name__ == "__main__":
+    import asyncio
     import tempfile
 
     share = tempfile.mkdtemp()
@@ -221,30 +295,38 @@ if __name__ == "__main__":
     with open(os.path.join(share, ro), "w", encoding="utf-8") as f:
         f.write("read only 內容\n")
 
+    def call(payload):
+        return asyncio.run(handle_request(payload, share))
+
     # read / append / 權限
-    assert handle_request(make_request("read", ro), share)["ok"] is True
-    assert handle_request(make_request("append", ro, "x"), share)["error"] == "permission_denied"
-    assert handle_request(make_request("append", rw, "一行\n"), share)["ok"] is True
-    assert handle_request(make_request("read", rw), share)["content"] == "一行\n"
-    assert handle_request(make_request("read", "secret.md"), share)["error"] == "not_shared"
-    assert handle_request(make_request("read", "../../etc/passwd"), share)["error"] == "path_denied"
-    assert handle_request(make_request("read", f"{ZONE_READONLY}/nope.md"), share)["error"] == "not_found"
+    assert call(make_request("read", ro))["ok"] is True
+    assert call(make_request("append", ro, "x"))["error"] == "permission_denied"
+    assert call(make_request("append", rw, "一行\n"))["ok"] is True
+    assert call(make_request("read", rw))["content"] == "一行\n"
+    assert call(make_request("read", "secret.md"))["error"] == "not_shared"
+    assert call(make_request("read", "../../etc/passwd"))["error"] == "path_denied"
+    assert call(make_request("read", f"{ZONE_READONLY}/nope.md"))["error"] == "not_found"
 
     # list：整個 share（應看到兩個 zone 與其中的檔）
-    r = handle_request(make_request("list"), share)
+    r = call(make_request("list"))
     assert r["ok"] is True
     assert f"{ZONE_READONLY}/" in r["entries"] and ro in r["entries"]
     assert f"{ZONE_APPEND}/" in r["entries"] and rw in r["entries"]
     handle_response(r)
 
     # list：指定子目錄
-    r2 = handle_request(make_request("list", ZONE_READONLY), share)
+    r2 = call(make_request("list", ZONE_READONLY))
     assert r2["ok"] is True and ro in r2["entries"]
 
     # list：路徑逃逸 → path_denied
-    assert handle_request(make_request("list", "../.."), share)["error"] == "path_denied"
+    assert call(make_request("list", "../.."))["error"] == "path_denied"
 
     # 不合法 payload → None
-    assert handle_request({"oops": 1}, share) is None
+    assert call({"oops": 1}) is None
 
-    print("✅ app_layer self-test passed（read/append/list + zone 權限 + 路徑安全）")
+    # ask 缺 query → missing_query
+    bad_ask = make_request("ask")
+    assert call(bad_ask)["error"] == "missing_query"
+
+    print("✅ app_layer self-test passed（read/append/list/ask schema + zone 權限 + 路徑安全）")
+    print("ℹ️  ask 的完整測試（需 ollama）：python3 ai_client.py")
