@@ -104,7 +104,7 @@ class P2PNode:
 
         if packet.type == "REQUEST":
             # 應用層處理 → 拿回要回傳的 RESPONSE payload → 加密送回原寄件者
-            tier = (self.agent_meta.get(sender) or {}).get("tier", "Common")
+            tier = agents.get_tier(self.agent_meta.get(sender) or {})
             resp_payload = await app_layer.handle_request(
                 app_payload, self.share,
                 owner=self.owner, sender_pubkey=sender, tier=tier,

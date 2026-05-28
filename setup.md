@@ -90,16 +90,21 @@ It prints the model it resolved to (`🤖 Asking local Ollama (<model>)`) follow
 
 ## 4. Create your share folder
 
-Each node serves files from `share/`. Two zones:
+Each node serves files from `share/`. **Four zones**, gated by the caller's tier (see §6):
 
-- `share/read-only/` — peers can read, cannot append
-- `share/read&append/` — peers can read **and** append
+| Zone | Who can see it | Notes |
+|---|---|---|
+| `share/read-only/`   | everyone (`common`+) | read only |
+| `share/read&append/` | everyone (`common`+) | read **and** append |
+| `share/task/`        | `task` and `personal` peers | shared task context |
+| `share/personal/`    | `personal` peers only | your private vault |
 
-`p2p_node.py` creates these on first run. You can drop notes/markdown/text files in either zone now (they become the AI's context for `ask`):
+`p2p_node.py` creates all four on first run (matches the proposal's Personal / Task / Common vault diagram). Drop notes/markdown/text files in any zone — they become the AI's `ask` context **only for peers whose tier can see that zone**:
 
 ```bash
-mkdir -p share/read-only share/read\&append
 echo "My favourite books: Snow Crash, The Three-Body Problem." > share/read-only/notes.md
+echo "Sprint goal: ship the demo." > share/task/plan.md
+echo "(private stuff only personal-tier peers can reach)" > share/personal/secret.md
 ```
 
 ## 5. Generate your identity (first run prints your public key)
@@ -121,14 +126,20 @@ Copy that string. Stop the node (Ctrl-C). The private key was saved to `linkedou
 
 Out-of-band — Signal / iMessage / paper / whatever. Each side gives the other their 64-hex pubkey.
 
-Add the other side to your trust list (persists to `agents.json`):
+Add the other side to your trust list (persists to `agents.json`). Optionally set their **tier** — how deep into your `share/` they can reach:
 
 ```bash
-python3 agents.py add <peer-pubkey> --name Bob
-python3 agents.py list      # confirm
+python3 agents.py add <peer-pubkey> --name Bob              # defaults to tier=common
+python3 agents.py add <peer-pubkey> --name Bob --tier task  # also sees share/task/
+python3 agents.py set-tier <peer-pubkey> personal           # change later, sees everything
+python3 agents.py list                                       # shows the tier column
 ```
 
-`agents.json` is per-machine and gitignored.
+Tiers (low → high): `common` < `task` < `personal`. A peer only ever sees zones at or below their tier — for `read`, `append`, `list`, **and** what the local AI is allowed to use as `ask` context. A `common` peer asking about your `personal/` files literally never has them in the model's context, so the AI cannot leak them (not just "refuses" — they're absent).
+
+> Changing a peer's tier takes effect when the **receiver** node restarts (the trust list is loaded at startup).
+
+`agents.json` is per-machine and gitignored. Entries with no `tier` field (older files) are treated as `common`.
 
 ## 7. Pick a connection mode
 

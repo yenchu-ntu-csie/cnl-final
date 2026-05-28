@@ -17,11 +17,11 @@ Right now `_collect_ask_context` dumps every text file in `share/` into the prom
 - [ ] Return top-k chunks instead of "everything until cap."
 - [ ] Populate a real `FileResponse.sources: list[str]` with the filenames that were actually retrieved (this is the *code-populated* sources, not the model-invented kind).
 
-### 2. Per-peer tier from `agents.json`
-`P2PNode.agent_meta` already carries the dict; `_do_ask` already accepts `tier`. Today every peer defaults to `Common`.
-- [ ] Extend `agents.py add` to optionally take `--tier Common|Task|Personal`.
-- [ ] Read `agent_meta[sender].get("tier", "Common")` (already wired) — just needs values to read.
-- [ ] Use `tier` to filter which `share/` subfolders count as context (e.g. `Task` peers also see `share/task/`).
+### 2. ~~Per-peer tier from `agents.json`~~ ✅ done
+- `agents.py`: `TIERS=(common,task,personal)`, `add --tier`, `set-tier` subcommand, `get_tier()` (lenient read), tier column in `list`. `load()` now survives empty/corrupt JSON.
+- `app_layer.py`: four zones (`read-only`/`read&append`/`task`/`personal`) via `ZONE_MIN_TIER`; `_zones_for_tier()`; `_check`/`_do_list`/`_collect_ask_context` all tier-gated; `ensure_share` creates all four.
+- `p2p_node.py`: reads sender tier via `agents.get_tier()`.
+- Verified: self-test (tier ACL + backward-compat) + live demo — common peer's `ask` has the secret **absent** from context (`ctx_chunks=1` vs `3`), so the AI cannot leak it; tier change takes effect on receiver restart.
 
 ### 3. Direct-mode response channel
 Today RESPONSE only works in relay mode. Direct LAN mode prints the result locally on the receiver.

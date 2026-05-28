@@ -33,10 +33,37 @@ from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel
 
 import ai_client
+from agents import TIERS, DEFAULT_TIER, normalize_tier
 
-# 兩個分享區的資料夾名稱（要改名改這裡即可）
+# 分享區的資料夾名稱（要改名改這裡即可）
 ZONE_READONLY = "read-only"
 ZONE_APPEND = "read&append"
+ZONE_TASK = "task"
+ZONE_PERSONAL = "personal"
+
+# 每個 zone 需要的「最低 tier」。peer 的 tier 要 >= 這個才看得到該區。
+# common 看得到 read-only / read&append；task 多看 task/；personal 全看。
+ZONE_MIN_TIER = {
+    ZONE_READONLY: "common",
+    ZONE_APPEND:   "common",
+    ZONE_TASK:     "task",
+    ZONE_PERSONAL: "personal",
+}
+ALL_ZONES = tuple(ZONE_MIN_TIER.keys())
+
+
+def _tier_rank(tier: str) -> int:
+    """tier 在 TIERS 裡的序（越高權限越大）；不合法退回 common。"""
+    try:
+        return TIERS.index(normalize_tier(tier))
+    except ValueError:
+        return TIERS.index(DEFAULT_TIER)
+
+
+def _zones_for_tier(tier: str) -> set:
+    """這個 tier 看得到哪些 zone 資料夾名稱。"""
+    r = _tier_rank(tier)
+    return {z for z, need in ZONE_MIN_TIER.items() if _tier_rank(need) <= r}
 
 
 # ── 應用層 JSON schema（解密後的明文）──────────────────────
@@ -59,9 +86,9 @@ class FileResponse(BaseModel):
 
 # ── share/ 結構 ───────────────────────────────────────────
 def ensure_share(share: str) -> None:
-    """確保 share/read-only 與 share/read&append 兩個 zone 存在。"""
-    os.makedirs(os.path.join(share, ZONE_READONLY), exist_ok=True)
-    os.makedirs(os.path.join(share, ZONE_APPEND), exist_ok=True)
+    """確保四個 zone 都存在（read-only / read&append / task / personal）。"""
+    for zone in ALL_ZONES:
+        os.makedirs(os.path.join(share, zone), exist_ok=True)
 
 
 # ── 送訊方：組裝 REQUEST payload ───────────────────────────
@@ -92,8 +119,9 @@ def _safe_resolve(share: str, rel_path: str) -> Tuple[Optional[str], Optional[st
     return full, None
 
 
-def _check(req: FileRequest, share: str) -> Tuple[Optional[str], Optional[str]]:
-    """read / append 的檢查。回傳 (可操作的絕對路徑, None) 或 (None, 錯誤碼)。"""
+def _check(req: FileRequest, share: str,
+           tier: str = DEFAULT_TIER) -> Tuple[Optional[str], Optional[str]]:
+    """read / append 的檢查（含 tier 權限）。回傳 (可操作的絕對路徑, None) 或 (None, 錯誤碼)。"""
     share_root = os.path.realpath(share)
     full, err = _safe_resolve(share, req.path)
     if err:
@@ -102,15 +130,15 @@ def _check(req: FileRequest, share: str) -> Tuple[Optional[str], Optional[str]]:
     # 必須落在某個 zone 內
     rel = os.path.relpath(full, share_root)
     top = rel.split(os.sep)[0]
-    if top == ZONE_READONLY:
-        zone = "ro"
-    elif top == ZONE_APPEND:
-        zone = "rw"
-    else:
+    if top not in ALL_ZONES:
         return None, "not_shared"
 
-    # append 只允許在 read&append/
-    if req.op == "append" and zone == "ro":
+    # tier 不夠 → 一律回 not_shared（不洩漏該區是否存在）
+    if top not in _zones_for_tier(tier):
+        return None, "not_shared"
+
+    # append 只允許在「可追加」的區（目前只有 read&append/）
+    if req.op == "append" and top != ZONE_APPEND:
         return None, "permission_denied"
 
     return full, None
@@ -138,8 +166,9 @@ def _do_file_op(req: FileRequest, full: str) -> FileResponse:
         return FileResponse(id=req.id, ok=False, error=f"io_error: {e}")
 
 
-def _do_list(req: FileRequest, share: str) -> FileResponse:
-    """列出 share/（或其子目錄）的資料夾結構。只做路徑安全，不限 zone。"""
+def _do_list(req: FileRequest, share: str,
+             tier: str = DEFAULT_TIER) -> FileResponse:
+    """列出 share/（或其子目錄）的結構，只顯示這個 tier 看得到的 zone。"""
     share_root = os.path.realpath(share)
     full, err = _safe_resolve(share, req.path)
     if err:
@@ -147,9 +176,21 @@ def _do_list(req: FileRequest, share: str) -> FileResponse:
     if not os.path.exists(full):
         return FileResponse(id=req.id, ok=False, error="not_found")
 
+    allowed = _zones_for_tier(tier)
+
+    # 列特定子目錄時：它的頂層 zone 必須是這個 tier 看得到的
+    rel_root = os.path.relpath(full, share_root)
+    if rel_root != ".":
+        top = rel_root.split(os.sep)[0]
+        if top not in allowed:
+            return FileResponse(id=req.id, ok=False, error="not_shared")
+
     entries: List[str] = []
     if os.path.isdir(full):
         for root, dirs, files in os.walk(full):
+            # 在 share 根目錄這層，把 tier 看不到的 zone 直接剪掉（不往下走）
+            if os.path.realpath(root) == share_root:
+                dirs[:] = [d for d in dirs if d in allowed]
             dirs.sort()
             for d in dirs:
                 entries.append(os.path.relpath(os.path.join(root, d), share_root) + "/")
@@ -167,29 +208,34 @@ def _do_list(req: FileRequest, share: str) -> FileResponse:
 # 注意：不是把整個 share/ 回傳給對方，只是給 LLM 當參考；最終只回 LLM 的 answer。
 _ASK_CTX_LIMIT = 50_000   # 防止 context 過大爆炸（單位 bytes）
 
-def _collect_ask_context(share: str) -> List[str]:
-    """蒐集 share/ 底下所有文字檔當 LLM 的 context chunks（簡易版 RAG）。"""
+def _collect_ask_context(share: str, tier: str = DEFAULT_TIER) -> List[str]:
+    """蒐集這個 tier 看得到的 zone 底下的文字檔，當 LLM 的 context chunks（簡易版 RAG）。"""
     chunks: List[str] = []
     total = 0
     share_root = os.path.realpath(share)
     if not os.path.isdir(share_root):
         return chunks
-    for root, _, files in os.walk(share_root):
-        for name in sorted(files):
-            if name.startswith("."):
-                continue
-            full = os.path.join(root, name)
-            rel = os.path.relpath(full, share_root)
-            try:
-                with open(full, encoding="utf-8") as f:
-                    body = f.read()
-            except (UnicodeDecodeError, OSError):
-                continue   # 跳過非文字檔
-            chunk = f"--- {rel} ---\n{body}"
-            if total + len(chunk) > _ASK_CTX_LIMIT:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
+    # 只走這個 tier 被允許的 zone（tier 不夠的資料夾根本不進 LLM context）
+    for zone in sorted(_zones_for_tier(tier)):
+        zone_root = os.path.join(share_root, zone)
+        if not os.path.isdir(zone_root):
+            continue
+        for root, _, files in os.walk(zone_root):
+            for name in sorted(files):
+                if name.startswith("."):
+                    continue
+                full = os.path.join(root, name)
+                rel = os.path.relpath(full, share_root)
+                try:
+                    with open(full, encoding="utf-8") as f:
+                        body = f.read()
+                except (UnicodeDecodeError, OSError):
+                    continue   # 跳過非文字檔
+                chunk = f"--- {rel} ---\n{body}"
+                if total + len(chunk) > _ASK_CTX_LIMIT:
+                    return chunks
+                chunks.append(chunk)
+                total += len(chunk)
     return chunks
 
 
@@ -197,8 +243,8 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
                   tier: str, model: Optional[str] = None) -> FileResponse:
     if not req.query:
         return FileResponse(id=req.id, ok=False, error="missing_query")
-    ctx = _collect_ask_context(share)
-    print(f"   🧠 [Ask] '{req.query[:60]}'… ctx_chunks={len(ctx)} model={model or 'auto'}")
+    ctx = _collect_ask_context(share, tier)
+    print(f"   🧠 [Ask] '{req.query[:60]}'… tier={tier} ctx_chunks={len(ctx)} model={model or 'auto'}")
     try:
         text = await ai_client.answer(
             owner=owner,
@@ -215,7 +261,7 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
 
 async def handle_request(payload: Dict, share: str, *,
                           owner: str = "Anonymous", sender_pubkey: str = "",
-                          tier: str = "Common",
+                          tier: str = DEFAULT_TIER,
                           model: Optional[str] = None) -> Optional[Dict]:
     """解析 REQUEST → 權限/路徑檢查 → 執行 → 回傳要送回去的 RESPONSE payload。
     解析失敗回傳 None（呼叫端就不用回任何東西）。"""
@@ -225,16 +271,21 @@ async def handle_request(payload: Dict, share: str, *,
         print(f"   ⚠️ 無效 request: {e}")
         return None
 
+    try:
+        tier = normalize_tier(tier)   # 大小寫正規化
+    except ValueError:
+        tier = DEFAULT_TIER           # 網路入口寬鬆：不合法的 tier 一律降為 common，不讓它 crash
+
     op_label = req.query[:40] + "…" if req.op == "ask" and req.query else (req.path or "(share 根目錄)")
-    print(f"   📂 [Request] id={req.id} op={req.op} {op_label}")
+    print(f"   📂 [Request] id={req.id} op={req.op} tier={tier} {op_label}")
 
     if req.op == "list":
-        resp = _do_list(req, share)
+        resp = _do_list(req, share, tier)
     elif req.op == "ask":
         resp = await _do_ask(req, share, owner=owner, sender_pubkey=sender_pubkey,
                               tier=tier, model=model)
     else:
-        full, err = _check(req, share)
+        full, err = _check(req, share, tier)
         resp = FileResponse(id=req.id, ok=False, error=err) if err else _do_file_op(req, full)
 
     if resp.ok:
@@ -291,15 +342,23 @@ if __name__ == "__main__":
     import asyncio
     import tempfile
 
+    import agents as _agents
+
     share = tempfile.mkdtemp()
     ensure_share(share)
     ro = f"{ZONE_READONLY}/doc.md"
     rw = f"{ZONE_APPEND}/log.md"
+    tk = f"{ZONE_TASK}/plan.md"
+    pv = f"{ZONE_PERSONAL}/secret.md"
     with open(os.path.join(share, ro), "w", encoding="utf-8") as f:
         f.write("read only 內容\n")
+    with open(os.path.join(share, tk), "w", encoding="utf-8") as f:
+        f.write("task 內容\n")
+    with open(os.path.join(share, pv), "w", encoding="utf-8") as f:
+        f.write("personal 機密\n")
 
-    def call(payload):
-        return asyncio.run(handle_request(payload, share))
+    def call(payload, tier=DEFAULT_TIER):
+        return asyncio.run(handle_request(payload, share, tier=tier))
 
     # read / append / 權限
     assert call(make_request("read", ro))["ok"] is True
@@ -331,5 +390,35 @@ if __name__ == "__main__":
     bad_ask = make_request("ask")
     assert call(bad_ask)["error"] == "missing_query"
 
-    print("✅ app_layer self-test passed（read/append/list/ask schema + zone 權限 + 路徑安全）")
+    # ── tier 權限 ───────────────────────────────────────────
+    # common（預設）看不到 task / personal
+    assert call(make_request("read", tk))["error"] == "not_shared"
+    assert call(make_request("read", pv))["error"] == "not_shared"
+    rc = call(make_request("list"))
+    assert f"{ZONE_TASK}/" not in rc["entries"] and f"{ZONE_PERSONAL}/" not in rc["entries"]
+    assert call(make_request("list", ZONE_TASK))["error"] == "not_shared"
+
+    # task 看得到 task，但看不到 personal
+    assert call(make_request("read", tk), tier="task")["content"] == "task 內容\n"
+    assert call(make_request("read", pv), tier="task")["error"] == "not_shared"
+    rt = call(make_request("list"), tier="task")
+    assert f"{ZONE_TASK}/" in rt["entries"] and f"{ZONE_PERSONAL}/" not in rt["entries"]
+
+    # personal 全看得到
+    assert call(make_request("read", pv), tier="personal")["content"] == "personal 機密\n"
+    rp = call(make_request("list"), tier="personal")
+    assert f"{ZONE_PERSONAL}/" in rp["entries"] and f"{ZONE_TASK}/" in rp["entries"]
+
+    # tier 大小寫 / 不合法 → 寬鬆處理（不 crash）
+    assert call(make_request("read", tk), tier="TASK")["content"] == "task 內容\n"
+    assert call(make_request("read", tk), tier="bogus")["error"] == "not_shared"  # 降為 common
+
+    # _collect_ask_context 按 tier 過濾：層級越高，看到的 chunks 越多（或相等）
+    assert len(_collect_ask_context(share, "common")) < len(_collect_ask_context(share, "personal"))
+
+    # 向下相容：舊的 agent meta（沒有 tier 欄位）→ 視為 common
+    assert _agents.get_tier({"name": "Old", "added": "2026-01-01"}) == "common"
+    assert _agents.get_tier({"name": "Bad", "tier": "nonsense"}) == "common"
+
+    print("✅ app_layer self-test passed（read/append/list/ask + tier ACL + 向下相容 + 路徑安全）")
     print("ℹ️  ask 的完整測試（需 ollama）：python3 ai_client.py")

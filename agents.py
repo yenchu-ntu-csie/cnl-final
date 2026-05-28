@@ -3,16 +3,21 @@ LinkedOut agent list（信任白名單）持久化管理。
 
 agents.json 格式（flat dict，key = 對方公鑰 hex）：
 {
-  "1d11a9a3…": {"name": "B", "added": "2026-05-27"},
-  "9f0a915…":  {"name": "Carol", "added": "2026-05-27"}
+  "1d11a9a3…": {"name": "B", "added": "2026-05-27", "tier": "common"},
+  "9f0a915…":  {"name": "Carol", "added": "2026-05-27", "tier": "task"}
 }
 
 節點啟動時會載入這份清單，接受清單內「所有人」傳來的訊息，
-不需在命令列逐一指定 --trust。未來可把每個 value 擴成 per-method/per-vault 權限。
+不需在命令列逐一指定 --trust。
+
+權限分層（tier）：每個 peer 有一個 tier，決定他看得到 share/ 的哪幾區：
+  common（預設）< task < personal
+缺 tier 欄位 → 視為 common（向下相容舊的 agents.json）。
 
 CLI：
   python3 agents.py list
-  python3 agents.py add <pubkey> --name B
+  python3 agents.py add <pubkey> --name B [--tier task]
+  python3 agents.py set-tier <pubkey> <tier>
   python3 agents.py remove <pubkey>
 """
 
@@ -23,6 +28,18 @@ from datetime import date
 from typing import Dict
 
 DEFAULT_PATH = "agents.json"
+
+# 權限層級（由低到高）；只在這裡宣告一次，app_layer 從這裡 import 引用。
+TIERS = ("common", "task", "personal")
+DEFAULT_TIER = "common"
+
+
+def normalize_tier(tier: str) -> str:
+    """驗證並正規化 tier（大小寫不敏感）。不合法則 raise。"""
+    t = (tier or DEFAULT_TIER).strip().lower()
+    if t not in TIERS:
+        raise ValueError(f"不合法的 tier：{tier!r}（需為 {'/'.join(TIERS)} 之一）")
+    return t
 
 
 def _valid_pubkey(pubkey: str) -> bool:
@@ -36,8 +53,12 @@ def _valid_pubkey(pubkey: str) -> bool:
 def load(path: str = DEFAULT_PATH) -> Dict[str, dict]:
     if not os.path.exists(path):
         return {}
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        # 空檔 / 壞掉的 JSON → 當成空清單，別讓節點啟動就 crash
+        return {}
     return data if isinstance(data, dict) else {}
 
 
@@ -46,15 +67,39 @@ def save(agents: Dict[str, dict], path: str = DEFAULT_PATH) -> None:
         json.dump(agents, f, ensure_ascii=False, indent=2)
 
 
-def add(pubkey: str, name: str = "", path: str = DEFAULT_PATH) -> Dict[str, dict]:
+def get_tier(meta: dict) -> str:
+    """從一筆 agent meta 取 tier；缺欄位 / 不合法都退回 common（讀取端寬鬆）。"""
+    try:
+        return normalize_tier(meta.get("tier", DEFAULT_TIER))
+    except ValueError:
+        return DEFAULT_TIER
+
+
+def add(pubkey: str, name: str = "", path: str = DEFAULT_PATH,
+        tier: str = None) -> Dict[str, dict]:
     if not _valid_pubkey(pubkey):
         raise ValueError(f"不是合法的 X25519 公鑰（需 64 hex 字元）：{pubkey[:24]}…")
     agents = load(path)
     existing = agents.get(pubkey, {})
+    # tier=None → 沿用既有的；既有也沒有 → common
+    resolved_tier = normalize_tier(tier) if tier is not None \
+        else get_tier(existing)
     agents[pubkey] = {
         "name": name or existing.get("name", ""),
         "added": existing.get("added", date.today().isoformat()),
+        "tier": resolved_tier,
     }
+    save(agents, path)
+    return agents
+
+
+def set_tier(pubkey: str, tier: str, path: str = DEFAULT_PATH) -> Dict[str, dict]:
+    """改某個既有 peer 的 tier（不必重新 add）。peer 不存在則 raise。"""
+    resolved = normalize_tier(tier)
+    agents = load(path)
+    if pubkey not in agents:
+        raise ValueError(f"agent list 裡沒有這把公鑰：{pubkey[:24]}…（先 add 再 set-tier）")
+    agents[pubkey]["tier"] = resolved
     save(agents, path)
     return agents
 
@@ -72,7 +117,8 @@ def _print_list(agents: Dict[str, dict]):
         return
     print(f"🤝 agent list（{len(agents)} 人）:")
     for pk, meta in agents.items():
-        print(f"   • {meta.get('name') or '(無名)':<10} {pk}  (added {meta.get('added','?')})")
+        name = meta.get('name') or '(無名)'
+        print(f"   • {name:<10} [{get_tier(meta):<8}] {pk}  (added {meta.get('added','?')})")
 
 
 if __name__ == "__main__":
@@ -83,6 +129,12 @@ if __name__ == "__main__":
     pa = sub.add_parser("add", help="加入一把公鑰")
     pa.add_argument("pubkey")
     pa.add_argument("--name", default="")
+    pa.add_argument("--tier", default=None, choices=TIERS,
+                    help=f"權限層級（{'/'.join(TIERS)}；預設 {DEFAULT_TIER}）")
+
+    pst = sub.add_parser("set-tier", help="改既有 peer 的 tier")
+    pst.add_argument("pubkey")
+    pst.add_argument("tier", choices=TIERS)
 
     pr = sub.add_parser("remove", help="移除一把公鑰")
     pr.add_argument("pubkey")
@@ -90,9 +142,15 @@ if __name__ == "__main__":
     sub.add_parser("list", help="列出目前白名單")
 
     args = p.parse_args()
-    if args.cmd == "add":
-        _print_list(add(args.pubkey, args.name, args.file))
-    elif args.cmd == "remove":
-        _print_list(remove(args.pubkey, args.file))
-    elif args.cmd == "list":
-        _print_list(load(args.file))
+    try:
+        if args.cmd == "add":
+            _print_list(add(args.pubkey, args.name, args.file, tier=args.tier))
+        elif args.cmd == "set-tier":
+            _print_list(set_tier(args.pubkey, args.tier, args.file))
+        elif args.cmd == "remove":
+            _print_list(remove(args.pubkey, args.file))
+        elif args.cmd == "list":
+            _print_list(load(args.file))
+    except ValueError as e:
+        print(f"⚠️  {e}")
+        raise SystemExit(1)
