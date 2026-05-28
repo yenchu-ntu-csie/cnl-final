@@ -1,0 +1,19 @@
+# LinkedOut — Python 套件需求
+#
+# 需要 Python 3.10+（用到 pydantic v2、asyncio.to_thread 等）。
+# 安裝：
+#     python3 -m venv .venv
+#     source .venv/bin/activate
+#     pip install -r requirements.txt
+#
+# 註：ai_client.py 只用 Python 標準函式庫（urllib），不需要下面任何套件；
+#     ai_client 與 Ollama 之間是走 HTTP，不靠 pip 套件。
+#     下面兩個套件是給協定層（pydantic）與加密層（cryptography）用的。
+
+# 資料模型 / 封包 schema 驗證（用了 v2 的 model_validate / model_dump_json）
+pydantic>=2.0,<3
+
+# X25519 金鑰、ChaCha20-Poly1305 AEAD、HKDF（e2ee.py）
+cryptography>=41.0
+
+# 實測可運作版本（2026-05，供對照）：pydantic 2.13.4, cryptography 48.0.0

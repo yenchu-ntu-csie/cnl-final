@@ -3,6 +3,7 @@
 > README.md is outdated (still describes pre-`ask` state) — left untouched intentionally; refresh once the picture below is locked in.
 
 ## Current state
+- Portability: `requirements.txt` (pydantic + cryptography, Python 3.10+), clean-venv install verified. `setup.md` has one-shot venv flow. Ollama model + `OLLAMA_HOST` already env-driven. `ai_client.py` is stdlib-only.
 - E2EE network layer + relay + trust whitelist: done.
 - App layer `read` / `append` / `list` with two-zone permission (`share/read-only`, `share/read&append`) + path-safety: done.
 - App layer `ask` op: Ollama-backed, returns plain string (no JSON wrapper). Context = all text files under `share/`, capped at 50 KB.

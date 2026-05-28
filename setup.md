@@ -6,24 +6,37 @@ How to get a LinkedOut node running from a fresh checkout — two laptops, talki
 
 | Need | Why | How |
 |---|---|---|
-| Python ≥ 3.10 | asyncio, pydantic v2 | `brew install python` / system python |
+| **Python ≥ 3.10** | pydantic v2, `asyncio.to_thread` | `brew install python` / system python / pyenv |
 | Ollama | runs the local LLM that answers `ask` queries | `brew install ollama` (macOS) or [ollama.com/download](https://ollama.com/download) |
-| `pip` deps | `pydantic`, `cryptography` | see step 2 |
+| `pip` deps | `pydantic`, `cryptography` — see `requirements.txt` | step 2 |
+
+Check your Python first — 3.10 or newer:
+
+```bash
+python3 --version    # need >= 3.10
+```
 
 `ai_client.py` itself has **no pip dependencies** — it talks to Ollama over `urllib`. Only the protocol layer needs pydantic/cryptography.
 
-## 2. Python dependencies
+## 2. Python dependencies (one-shot)
+
+From the repo root:
 
 ```bash
-# In a virtualenv or conda env of your choice
-pip install pydantic cryptography
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 Sanity check:
 
 ```bash
 python3 -c "import pydantic, cryptography; print('ok')"
+python3 e2ee.py        # runs the crypto self-test
+python3 app_layer.py   # runs the app-layer self-test
 ```
+
+> The `.venv/` folder is gitignored — each teammate creates their own; it never gets committed. Re-run `source .venv/bin/activate` in every new shell.
 
 ## 3. Ollama
 
