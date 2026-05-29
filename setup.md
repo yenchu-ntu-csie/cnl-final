@@ -178,13 +178,28 @@ She'll see:
 
 ### Bob (sender — fires one request and waits for response)
 
-#### Ask Alice's local AI a question
+#### Ask Alice's local AI a question (two modes)
 ```bash
+# remote (default): Alice's AI reads her share/ and writes the answer; Bob needs no model
 python3 p2p_node.py --port 8002 --name Bob \
   --server-ip <RELAY_IP> --server-port 9000 \
   --peer-pubkey <Alice's pubkey> \
-  --op ask --query "What are your favourite books?"
+  --op ask --mode remote --query "What are your favourite books?"
+
+# local: Alice returns the raw (tier-filtered) chunks, BOB's own AI synthesizes locally
+python3 p2p_node.py --port 8002 --name Bob \
+  --server-ip <RELAY_IP> --server-port 9000 \
+  --peer-pubkey <Alice's pubkey> \
+  --op ask --mode local --query "What are your favourite books?"
 ```
+
+| mode | who runs the model | what leaves the data owner | when to use |
+|---|---|---|---|
+| `remote` (default) | the **owner** (Alice) | only the synthesized answer | privacy-first; asker has no/weak model |
+| `local` | the **asker** (Bob) | the raw tier-filtered chunks | asker wants to reason over the data itself / combine sources |
+
+> `--mode` is chosen by the asker per request (no AI/auto decision). Tier ACL still gates what
+> data is reachable in **both** modes — `local` never returns chunks the asker's tier can't see.
 
 #### Read a file from Alice's share/
 ```bash

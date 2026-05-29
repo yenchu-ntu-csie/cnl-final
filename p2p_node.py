@@ -11,6 +11,7 @@ from typing import List, Dict, Optional, Set
 import e2ee
 import agents
 import app_layer
+import ai_client
 
 # ==========================================
 # 1. 資料模型 (照你們的定義，微調以適應 Pydantic v2)
@@ -50,6 +51,7 @@ class P2PNode:
         self.owner = owner                       # 給本機 AI 介紹自己身分用（ask op）
         self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, ...}，未來放 ACL 用
         self.model = model                       # 給 ask op 用的 Ollama 模型；None 走 env/auto
+        self.pending: Dict[str, str] = {}        # local 模式：request_id → 原始 query（收到 chunks 時用 A 自己的 AI 生成）
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -59,6 +61,11 @@ class P2PNode:
     def _aad(sender: str, target: Optional[str], msg_id: str, ptype: str) -> bytes:
         """把路由 metadata 綁進 AEAD，防止 relay 竄改 header。"""
         return f"{sender}|{target}|{msg_id}|{ptype}".encode()
+
+    def register_pending(self, req: Dict):
+        """local 模式 ask 送出前先把 query 記下來，等對方回 chunks 時用本機 AI 生成。"""
+        if req.get("op") == "ask" and req.get("mode") == "local" and req.get("query"):
+            self.pending[req["id"]] = req["query"]
 
     def build_packet(self, target_pubkey: str, ptype: str, app_payload: Dict) -> ProtocolPacket:
         """建立封包：app_payload 會以收件者公鑰加密後放進 payload。"""
@@ -117,9 +124,38 @@ class P2PNode:
                 else:
                     print("   ⚠️ 直連模式尚未接回應通道（結果已在上面顯示）")
         elif packet.type == "RESPONSE":
-            app_layer.handle_response(app_payload)
+            # local 模式：對方回的是原始 chunks → 用「我自己的」AI 生成答案
+            if app_payload.get("ok") and app_payload.get("context") is not None:
+                await self._synthesize_local(sender, app_payload)
+            else:
+                app_layer.handle_response(app_payload)
         else:
             print(f"   ⚠️ 未知封包類型: {packet.type}")
+
+    async def _synthesize_local(self, sender: str, app_payload: Dict):
+        """收到 local 模式的 chunks：查回原始 query，用本機 AI 生成答案並印出。"""
+        rid = app_payload.get("id", "")
+        chunks = app_payload.get("context") or []
+        query = self.pending.pop(rid, None)
+        print(f"   📥 [Ask/local] 從 {sender[:16]}… 取回 {len(chunks)} 個 chunks，改用本機 AI 生成…")
+        if not query:
+            print("   ⚠️ 找不到對應的原始 query（可能不是這個節點送出的），只列出 chunks：")
+            for c in chunks:
+                print(f"      • {c.splitlines()[0] if c else ''}")
+            return
+        try:
+            text = await ai_client.synthesize(
+                owner=self.owner, source_pubkey=sender,
+                query_text=query, ctx_chunks=chunks, model=self.model,
+            )
+        except Exception as e:
+            print(f"   🚫 [Ask/local] 本機 AI 生成失敗：{e}")
+            return
+        print(f"   🤖 [Reply id={rid}] 本機 AI（用 {sender[:8]}… 的資料）回應：")
+        print("   ┌────────────────────────────")
+        for line in (text.splitlines() or [""]):
+            print(f"   │ {line}")
+        print("   └────────────────────────────")
 
     # ── Socket Server（直連模式用）────────────────────────
     async def start_server(self):
@@ -259,6 +295,7 @@ def build_request_payload(args) -> Optional[Dict]:
         args.path or "",
         interpret_escapes(args.content),
         query=args.query,
+        mode=args.mode,
     )
 
 
@@ -267,8 +304,10 @@ def build_request_payload(args) -> Optional[Dict]:
 # ==========================================
 _REPL_HELP = (
     "指令：\n"
-    "  <任意文字>            送 ask 到對方的 AI（預設模式）\n"
+    "  <任意文字>            送 ask 到對方的 AI（用啟動時的 --mode，預設 remote）\n"
     "  /ask <text>           同上，顯式版本\n"
+    "  /remote <text>        強制 remote：對方的 AI 幫你統整答案\n"
+    "  /local <text>         強制 local：對方只回原始資料，你自己的 AI 生成\n"
     "  /read <path>          讀對方 share/ 內的檔（如 read-only/notes.md）\n"
     "  /append <path> <text> 追加到對方 share/read&append/ 內的檔\n"
     "  /list [path]          列出對方 share/ 的結構\n"
@@ -277,13 +316,17 @@ _REPL_HELP = (
 )
 
 
-def _parse_repl_line(line: str) -> Optional[Dict]:
+def _parse_repl_line(line: str, default_mode: str = app_layer.DEFAULT_ASK_MODE) -> Optional[Dict]:
     """把使用者輸入的一行轉成 REQUEST payload；不合法回 None。"""
     line = line.strip()
     if not line:
         return None
     if line.startswith("/ask "):
-        return app_layer.make_request("ask", query=line[5:].strip())
+        return app_layer.make_request("ask", query=line[5:].strip(), mode=default_mode)
+    if line.startswith("/remote "):
+        return app_layer.make_request("ask", query=line[len("/remote "):].strip(), mode="remote")
+    if line.startswith("/local "):
+        return app_layer.make_request("ask", query=line[len("/local "):].strip(), mode="local")
     if line.startswith("/read "):
         return app_layer.make_request("read", path=line[6:].strip())
     if line.startswith("/append "):
@@ -300,14 +343,15 @@ def _parse_repl_line(line: str) -> Optional[Dict]:
     if line.startswith("/"):
         print(f"⚠️  未知指令：{line.split()[0]}（試試 /help）")
         return None
-    # 沒有斜線開頭 → 預設為 ask
-    return app_layer.make_request("ask", query=line)
+    # 沒有斜線開頭 → 預設為 ask（用 session 的預設 mode）
+    return app_layer.make_request("ask", query=line, mode=default_mode)
 
 
-async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str):
+async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str,
+                    default_mode: str = app_layer.DEFAULT_ASK_MODE):
     """讓使用者持續輸入問題 / 指令送給對方；回應由背景 run_relay → handle_incoming 印出。"""
     print()
-    print(f"💬 [REPL] 已連到 relay，現在和 {peer_label}({peer_pubkey[:8]}…) 對話。")
+    print(f"💬 [REPL] 已連到 relay，現在和 {peer_label}({peer_pubkey[:8]}…) 對話。預設 ask 模式：{default_mode}")
     print(_REPL_HELP)
     while True:
         try:
@@ -321,12 +365,14 @@ async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str):
         if line.strip() == "/help":
             print(_REPL_HELP)
             continue
-        req = _parse_repl_line(line)
+        req = _parse_repl_line(line, default_mode)
         if req is None:
             continue
+        node.register_pending(req)   # local 模式：先記住 query
         packet = node.build_packet(peer_pubkey, "REQUEST", req)
         detail = req.get("path") or req.get("query", "")
-        print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
+        mode_tag = f"[{req['mode']}] " if req.get("op") == "ask" else ""
+        print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {mode_tag}{detail}")
         await node.send_via_relay(peer_pubkey, packet)
         # 等一下再印下一個 prompt，讓回應有機會先顯示出來（不阻塞，只是體感）
         await asyncio.sleep(0.05)
@@ -374,7 +420,7 @@ async def main(args):
             else:
                 await asyncio.sleep(0.5)
                 peer_label = (agent_list.get(args.peer_pubkey) or {}).get("name") or "peer"
-                repl_task = asyncio.create_task(repl_loop(node, args.peer_pubkey, peer_label))
+                repl_task = asyncio.create_task(repl_loop(node, args.peer_pubkey, peer_label, args.mode))
                 done, pending = await asyncio.wait(
                     {relay_task, repl_task}, return_when=asyncio.FIRST_COMPLETED,
                 )
@@ -385,6 +431,7 @@ async def main(args):
             await asyncio.sleep(1)
             req = build_request_payload(args)
             if req:
+                node.register_pending(req)   # local 模式：先記住 query
                 packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
                 detail = req.get("path") or req.get("query", "")
                 print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
@@ -409,6 +456,7 @@ async def main(args):
             await asyncio.sleep(2)
             req = build_request_payload(args)
             if req:
+                node.register_pending(req)   # local 模式：先記住 query
                 packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
                 detail = req.get("path") or req.get("query", "")
                 print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
@@ -436,6 +484,8 @@ if __name__ == "__main__":
     parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list / ask 可省略")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容（支援 \\n 換行、\\t Tab）")
     parser.add_argument("--query",       type=str, default=None,        help="ask 要問對方 AI 的自然語言問題")
+    parser.add_argument("--mode",        type=str, default=app_layer.DEFAULT_ASK_MODE, choices=list(app_layer.ASK_MODES),
+                        help="ask 模式：remote=對方 AI 幫你統整（預設）；local=對方只回原始資料、你自己的 AI 生成")
     parser.add_argument("--repl",        action="store_true",           help="進入互動模式：在 prompt 持續輸入問題/指令（需 --peer-pubkey）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")

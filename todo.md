@@ -6,7 +6,12 @@
 - Portability: `requirements.txt` (pydantic + cryptography, Python 3.10+), clean-venv install verified. `setup.md` has one-shot venv flow. Ollama model + `OLLAMA_HOST` already env-driven. `ai_client.py` is stdlib-only.
 - E2EE network layer + relay + trust whitelist: done.
 - App layer `read` / `append` / `list` with two-zone permission (`share/read-only`, `share/read&append`) + path-safety: done.
-- App layer `ask` op: Ollama-backed, returns plain string (no JSON wrapper). Context = all text files under `share/`, capped at 50 KB.
+- App layer `ask` op: Ollama-backed, returns plain string (no JSON wrapper). Context = tier-filtered text files under `share/`, capped at 50 KB.
+- **`ask` 雙模式（`mode` 欄位，由 asker 用 `--mode` / REPL `/local` `/remote` 手動選；非 AI/自動）**:
+  - `remote`（預設）= owner 的 AI 統整，只回答案；`local` = owner 只回原始 chunks，asker 自己的 AI 生成。
+  - tier ACL 在兩種模式都生效（`local` 不會回 asker tier 看不到的 chunks）。
+  - `ai_client.synthesize()` 負責 asker 端 local 生成；`p2p_node.register_pending()` + `_synthesize_local()` 接回應。
+  - 決策層級「規則自動選 mode」**不做** —— 權限該擋的已在 tier ACL 擋過，不在 mode 這層重複。
 - Files: [ai_client.py](ai_client.py), [app_layer.py](app_layer.py), [p2p_node.py](p2p_node.py), [agents.py](agents.py), [e2ee.py](e2ee.py), [relay_server.py](relay_server.py).
 
 ## Next goals (rough priority)

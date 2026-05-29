@@ -51,6 +51,12 @@ ZONE_MIN_TIER = {
 }
 ALL_ZONES = tuple(ZONE_MIN_TIER.keys())
 
+# ask 的兩種模式（只在這裡宣告一次）：
+#   remote = 「B 幫 A 統整」：B 的 AI 讀自己 share/ 生成答案回傳（B 要有模型，A 不用）
+#   local  = 「A 自己讀資料」：B 只回傳 tier 過濾後的原始 chunks，A 用自己的 AI 生成（A 要有模型）
+ASK_MODES = ("remote", "local")
+DEFAULT_ASK_MODE = "remote"
+
 
 def _tier_rank(tier: str) -> int:
     """tier 在 TIERS 裡的序（越高權限越大）；不合法退回 common。"""
@@ -73,6 +79,7 @@ class FileRequest(BaseModel):
     path: str = ""                       # 相對 share/ 的路徑；list 可留空；ask 不需要
     content: Optional[str] = None        # append 才需要
     query: Optional[str] = None          # ask 才需要：要問對方 AI 的自然語言問題
+    mode: str = DEFAULT_ASK_MODE         # ask 模式：remote（B 統整）/ local（A 自己讀資料）
 
 
 class FileResponse(BaseModel):
@@ -80,7 +87,8 @@ class FileResponse(BaseModel):
     ok: bool                             # 是否成功
     content: Optional[str] = None        # read 成功時回傳整個檔案
     entries: Optional[List[str]] = None  # list 成功時回傳路徑清單（資料夾結尾帶 /）
-    answer: Optional[str] = None         # ask 成功時回傳 LLM 的純文字答覆
+    answer: Optional[str] = None         # ask remote 模式：B 的 AI 生成的純文字答覆
+    context: Optional[List[str]] = None  # ask local 模式：B 回傳的原始 chunks（A 自己拿去生成）
     error: Optional[str] = None          # path_denied / not_shared / permission_denied / not_found / bad_op / io_error
 
 
@@ -93,15 +101,16 @@ def ensure_share(share: str) -> None:
 
 # ── 送訊方：組裝 REQUEST payload ───────────────────────────
 def make_request(op: str, path: str = "", content: Optional[str] = None,
-                 query: Optional[str] = None) -> Dict:
+                 query: Optional[str] = None, mode: str = DEFAULT_ASK_MODE) -> Dict:
     """組一個 REQUEST payload（自動產生 id）。
-       read 不帶 content；list 可不帶 path；ask 用 query 帶問題。"""
+       read 不帶 content；list 可不帶 path；ask 用 query 帶問題、mode 選 remote/local。"""
     req = FileRequest(
         id=uuid.uuid4().hex[:8],
         op=op,
         path=path or "",
         content=(content or "") if op == "append" else None,
         query=query if op == "ask" else None,
+        mode=(mode if mode in ASK_MODES else DEFAULT_ASK_MODE) if op == "ask" else DEFAULT_ASK_MODE,
     )
     return req.model_dump(exclude_none=True)
 
@@ -243,8 +252,16 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
                   tier: str, model: Optional[str] = None) -> FileResponse:
     if not req.query:
         return FileResponse(id=req.id, ok=False, error="missing_query")
+    mode = req.mode if req.mode in ASK_MODES else DEFAULT_ASK_MODE
     ctx = _collect_ask_context(share, tier)
-    print(f"   🧠 [Ask] '{req.query[:60]}'… tier={tier} ctx_chunks={len(ctx)} model={model or 'auto'}")
+
+    # local 模式：B 不跑 AI，只把 tier 過濾後的原始 chunks 回給 A，由 A 自己生成。
+    if mode == "local":
+        print(f"   📤 [Ask/local] tier={tier} 回傳 {len(ctx)} 個原始 chunks 給 A 自己讀")
+        return FileResponse(id=req.id, ok=True, context=ctx)
+
+    # remote 模式（預設）：B 的 AI 讀自己 share/ 生成答案。
+    print(f"   🧠 [Ask/remote] '{req.query[:60]}'… tier={tier} ctx_chunks={len(ctx)} model={model or 'auto'}")
     try:
         text = await ai_client.answer(
             owner=owner,
@@ -276,7 +293,8 @@ async def handle_request(payload: Dict, share: str, *,
     except ValueError:
         tier = DEFAULT_TIER           # 網路入口寬鬆：不合法的 tier 一律降為 common，不讓它 crash
 
-    op_label = req.query[:40] + "…" if req.op == "ask" and req.query else (req.path or "(share 根目錄)")
+    op_label = (f"[{req.mode}] " + req.query[:40] + "…") if req.op == "ask" and req.query \
+        else (req.path or "(share 根目錄)")
     print(f"   📂 [Request] id={req.id} op={req.op} tier={tier} {op_label}")
 
     if req.op == "list":
@@ -420,5 +438,26 @@ if __name__ == "__main__":
     assert _agents.get_tier({"name": "Old", "added": "2026-01-01"}) == "common"
     assert _agents.get_tier({"name": "Bad", "tier": "nonsense"}) == "common"
 
-    print("✅ app_layer self-test passed（read/append/list/ask + tier ACL + 向下相容 + 路徑安全）")
-    print("ℹ️  ask 的完整測試（需 ollama）：python3 ai_client.py")
+    # ── ask 雙模式 ──────────────────────────────────────────
+    # local 模式：B 不跑 AI，回 context（原始 chunks）而非 answer
+    # 此時 share 內有：read-only/doc.md、read&append/log.md（前面 append 建的）、task/plan.md、personal/secret.md
+    rl = call(make_request("ask", query="任務?", mode="local"), tier="task")
+    assert rl["ok"] is True and "answer" not in rl
+    assert isinstance(rl["context"], list)
+    rl_common = call(make_request("ask", query="任務?", mode="local"), tier="common")
+    # 層級越高，local 回的 chunks 應該越多（tier 也吃在 context 上）
+    assert len(rl_common["context"]) < len(rl["context"])
+    # local 的 context 也吃 tier：personal 檔不會出現在 task 的 chunks 裡
+    assert all("personal 機密" not in c for c in rl["context"])
+    assert any("task 內容" in c for c in rl["context"])                  # task 看得到 task 檔
+    assert all("task 內容" not in c for c in rl_common["context"])        # common 看不到
+
+    # make_request 預設模式 = remote；沒給 mode 的舊 payload 也視為 remote
+    assert make_request("ask", query="x")["mode"] == "remote"
+    legacy = {"id": "abcd1234", "op": "ask", "query": "x"}               # 沒有 mode 欄位
+    assert FileRequest.model_validate(legacy).mode == "remote"
+    # 不合法 mode → 退回 remote
+    assert make_request("ask", query="x", mode="bogus")["mode"] == "remote"
+
+    print("✅ app_layer self-test passed（read/append/list/ask + tier ACL + ask 雙模式 + 向下相容 + 路徑安全）")
+    print("ℹ️  ask remote/local 的完整 AI 測試（需 ollama）：python3 ai_client.py")
