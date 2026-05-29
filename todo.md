@@ -28,13 +28,18 @@ Right now `_collect_ask_context` dumps every text file in `share/` into the prom
 - `p2p_node.py`: reads sender tier via `agents.get_tier()`.
 - Verified: self-test (tier ACL + backward-compat) + live demo — common peer's `ask` has the secret **absent** from context (`ctx_chunks=1` vs `3`), so the AI cannot leak it; tier change takes effect on receiver restart.
 
-### 3. Direct-mode response channel
-Today RESPONSE only works in relay mode. Direct LAN mode prints the result locally on the receiver.
-- [ ] Either: add `--peer-ip/--peer-port` to packet header so receiver can dial back, or
-- [ ] Keep the inbound `handle_client` socket open and write RESPONSE back on the same connection.
+### 3. ~~Direct-mode response channel~~ ✅ done
+直連 LAN 模式現在也能完成 QUERY→RESPONSE 來回（以前只有 relay 能）。做法 = 回應走同一條 TCP 連線（Option A）：
+- `p2p_node.py`：`handle_incoming(reply_writer=)`，直連時把 RESPONSE 寫回對方打進來的同一條 socket；`handle_client` 把 accept 到的 writer 傳下去；`send_packet` 送完 REQUEST 後在同連線等 RESPONSE（`DIRECT_REPLY_TIMEOUT=200s`，涵蓋慢的 ask）。relay 路徑不變（`reply_writer=None`）。
+- 驗證：localhost 直連 read（快）+ ask（慢, ollama）+ tier 仍生效（common 讀 personal → not_shared）；relay 模式 read 回歸正常。
 
 ### 4. ~~CLI surface for model choice~~ ✅ done
 `resolve_model()` in [ai_client.py](ai_client.py) now resolves in order: explicit `--model` → `LINKEDOUT_MODEL` → `OLLAMA_MODEL` → first installed. No hardcoded model name anywhere.
+
+### 5. run_B.sh 露出 `local` 模式（與 Felicity 協調）
+`script/run_B.sh`（Felicity 維護，commit e7cc8e0）早於 `--mode` 雙模式，`ask`/`repl` 目前只走預設 `remote`，沒把 `local` 露出來。功能不壞（向下相容），只是腳本選不到 local。
+- [ ] 加個用法（如 `./run_B.sh <A公鑰> ask-local "問題"` 或第 4 參數）把 `--mode local` 帶進去。
+- [ ] 這是 Felicity 在維護的腳本 → 跟她講一聲再改，避免共享分支互踩。
 
 ## Decisions parked (revisit when full picture is clearer)
 

@@ -13,6 +13,10 @@ import agents
 import app_layer
 import ai_client
 
+# 直連模式：送出 REQUEST 後在同一條連線等 RESPONSE 的上限秒數
+# （要涵蓋慢的 ask，例如 ollama 冷啟動載入模型）
+DIRECT_REPLY_TIMEOUT = 200
+
 # ==========================================
 # 1. 資料模型 (照你們的定義，微調以適應 Pydantic v2)
 # ==========================================
@@ -85,8 +89,10 @@ class P2PNode:
             signature="aead-x25519",   # 真實性由 AEAD + static DH 保證
         )
 
-    async def handle_incoming(self, packet: ProtocolPacket):
-        """收到封包：信任白名單檢查 → 解密 → 交給路由層。"""
+    async def handle_incoming(self, packet: ProtocolPacket,
+                              reply_writer: Optional[asyncio.StreamWriter] = None):
+        """收到封包：信任白名單檢查 → 解密 → 交給路由層。
+        reply_writer 不為 None 時（直連模式）：RESPONSE 直接寫回同一條連線。"""
         sender = packet.header.sender_pubkey
 
         # 信任白名單：未授權的寄件者直接拒收（proposal 的防 DoS / 未授權存取）
@@ -119,10 +125,15 @@ class P2PNode:
             )
             if resp_payload is not None:
                 pkt = self.build_packet(sender, "RESPONSE", resp_payload)
-                if self.srv_writer:
+                if reply_writer is not None:
+                    # 直連模式：把 RESPONSE 寫回對方剛剛打進來的同一條連線
+                    reply_writer.write((pkt.model_dump_json() + "\n").encode("utf-8"))
+                    await reply_writer.drain()
+                    print(f"   📤 [Direct] RESPONSE 已回傳給 {sender[:16]}…（🔒 已加密）")
+                elif self.srv_writer:
                     await self.send_via_relay(sender, pkt)
                 else:
-                    print("   ⚠️ 直連模式尚未接回應通道（結果已在上面顯示）")
+                    print("   ⚠️ 無回應通道（既非 relay 也非直連連線），結果已在上面顯示")
         elif packet.type == "RESPONSE":
             # local 模式：對方回的是原始 chunks → 用「我自己的」AI 生成答案
             if app_payload.get("ok") and app_payload.get("context") is not None:
@@ -176,7 +187,8 @@ class P2PNode:
                 try:
                     packet = ProtocolPacket.model_validate_json(json_str)
                     print(f"   ➔ [Received] Type: {packet.type} | MsgID: {packet.msg_id[:8]}… | From: {packet.header.sender_pubkey[:16]}…")
-                    await self.handle_incoming(packet)
+                    # 直連模式：把這條連線的 writer 交給 handle_incoming 當回應通道
+                    await self.handle_incoming(packet, reply_writer=writer)
                 except Exception as e:
                     print(f"   ⚠️ [Error] Invalid Packet format: {e}")
         except asyncio.CancelledError:
@@ -187,13 +199,26 @@ class P2PNode:
             await writer.wait_closed()
 
     async def send_packet(self, peer_ip: str, peer_port: int, packet: ProtocolPacket, retries=3) -> bool:
-        """直連模式：主動發送封包（帶簡單 Retry）。"""
+        """直連模式：主動發送封包，並在同一條連線上等對方的 RESPONSE（帶簡單 Retry）。"""
         for attempt in range(retries):
             try:
-                _, writer = await asyncio.open_connection(peer_ip, peer_port)
+                reader, writer = await asyncio.open_connection(peer_ip, peer_port)
                 writer.write((packet.model_dump_json() + "\n").encode('utf-8'))
                 await writer.drain()
                 print(f"📤 [Sent] Type: {packet.type} to {peer_ip}:{peer_port}（🔒 已加密）")
+                # 不立刻關 —— 在同一條連線等對方把 RESPONSE 寫回來
+                try:
+                    line = await asyncio.wait_for(reader.readline(), timeout=DIRECT_REPLY_TIMEOUT)
+                    if line:
+                        resp = ProtocolPacket.model_validate_json(line.decode("utf-8").strip())
+                        print(f"📥 [Direct] 收到 RESPONSE from {resp.header.sender_pubkey[:16]}…")
+                        await self.handle_incoming(resp)   # RESPONSE → 解密 → handle_response / 本機生成
+                    else:
+                        print("   ℹ️ 對方沒有回 RESPONSE（連線關閉）")
+                except asyncio.TimeoutError:
+                    print(f"   ⏰ 等 RESPONSE 超過 {DIRECT_REPLY_TIMEOUT}s，先放棄（對方可能還在算）")
+                except Exception as e:
+                    print(f"   ⚠️ 解析 RESPONSE 失敗：{e}")
                 writer.close()
                 await writer.wait_closed()
                 return True
