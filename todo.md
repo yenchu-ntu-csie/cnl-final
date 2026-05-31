@@ -28,9 +28,13 @@
 - **S0 單 peer** ✅（Felicity）
 - **S1 群組：capability-scan + 問直接朋友** ✅（Felicity，`--auto --peer-pubkey A,B`）——
   用「即時 capability 探測」當動態 peer-model，零維護表。testbed 實測 2/3。
-- **S4 顯式知識路由（多跳、每跳限權、沿信任鏈回傳）** 📝 已出規格 → [plan-s4-routing.zh.md](plan-s4-routing.zh.md)
-  - schema（`RouteQuery`/`RouteAnswer`）可先動 `app_layer.py`；路由/轉發/聚合在 `p2p_node.py`（**等 Felicity push 後 rebase 再做**）。
-  - 「要轉給誰」＝遞迴 `capability_probe`；驗收＝scenario D 2/3→3/3、印 `via: Bob→Carol→Dave`。
+- **S4 顯式知識路由（多跳、每跳限權、沿信任鏈回傳）** ✅ 傳輸層做完 → 規格 [plan-s4-routing.zh.md](plan-s4-routing.zh.md)
+  - `p2p_node.py` 加法實作（**沒碰 ai_client/app_layer**，跟 Felicity 衝突面最小）：`ROUTE_QUERY`/`ROUTE_ANSWER`
+    分支、`route_back`/`route_seen`/`route_pool` 狀態、`route_ask()`（origin 發查、收集、附 provenance 聚合）、`--route/--ttl`。
+  - 測試：[scenario/D_gpu/run_s4_demo.py](scenario/D_gpu/run_s4_demo.py)（import run_scenario，不改它）。
+  - **已驗證傳輸正確**：Carol 收到→轉發給 Dave→Dave 收到；run 中拿到完整 2 跳回程 `Dave→Carol→Bob`。
+  - **已知**：end-to-end 分數會在 2/3↔3/3、v1 0↔2 之間跳 —— 因為 `ai_client.capability_probe` 太嚴，
+    peer 常自評「不相關」就不作答 → 事實沒被吐出來。**這是 Felicity 正在修的 prompt**；她 push 後合併、重量分數。
   - 註：原 S2（tier-gated）已被 capability 探測涵蓋；原 S3（轉介提示）在稀疏圖無效，已併入 S4。
 - **S5 學習式 peer-model（效率優化，最後做）** ⬜
   - 從回饋學「誰答得被採用」→ 加權（distance-vector 式）→ 不再每次盲掃，targeted 路由、訊息量下降。
