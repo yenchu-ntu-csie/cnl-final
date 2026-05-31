@@ -100,8 +100,8 @@ class P2PNode:
         reply_writer 不為 None 時（直連模式）：RESPONSE 直接寫回同一條連線。"""
         sender = packet.header.sender_pubkey
 
-        # 信任白名單：未授權的寄件者直接拒收（proposal 的防 DoS / 未授權存取）
-        if self.trust and sender not in self.trust:
+        # 信任白名單：fail-closed —— 不在白名單一律拒收（空白名單 = 拒收所有，與啟動訊息一致）
+        if sender not in self.trust:
             print(f"   ⛔ [Reject] 未授權的寄件者 {sender[:16]}…（不在信任白名單）")
             return
 
@@ -231,16 +231,18 @@ class P2PNode:
         me = self.my_pubkey
         print(f"   🧭 [Route] 收到 qid={qid[:8]} ttl={ttl} path={[h[:6] for h in path]}")
 
-        # 自評：用自己 vault（看自己不受 tier 限，用 personal 收全部）
-        own = app_layer._collect_ask_context(self.share, "personal")
+        # 自評/作答只在「上游寄件者的 tier」視野內 —— 不可寫死 personal（否則繞過 tier ACL）。
+        # 路由語意：我只把「我願意分享給直接上游(sender)的那一層」拿出來作答；origin 經由信任鏈傳遞。
+        tier = agents.get_tier(self.agent_meta.get(sender) or {})
+        own = app_layer._collect_ask_context(self.share, tier)
         try:
-            cap = await ai_client.capability_probe(self.owner, sender, "personal",
+            cap = await ai_client.capability_probe(self.owner, sender, tier,
                                                    query, ctx_chunks=own, model=self.model)
         except Exception:
             cap = {"relevant": False}
         if cap.get("relevant") and own:
             try:
-                ans = await ai_client.answer(self.owner, sender, "personal",
+                ans = await ai_client.answer(self.owner, sender, tier,
                                              query, ctx_chunks=own, model=self.model)
                 await self._send_route_answer(sender, qid, ans, [me])
                 print(f"   🧭 [Route] 我({self.owner})有料 → 回 ROUTE_ANSWER 給上游")
