@@ -176,6 +176,28 @@ class P2PNode:
             raise RuntimeError(f"對方回錯誤：{resp.get('error')}")
         return resp.get("answer") or ""
 
+    async def send_capability_and_wait(self, peer_pubkey: str, topic: str,
+                                          timeout: float = 120.0) -> Dict:
+        """送 capability 探測給 peer 並等 RESPONSE。回傳 {relevant, topics, summary} dict。"""
+        if not self.srv_writer:
+            raise RuntimeError("send_capability_and_wait 需要 relay 模式")
+        req = app_layer.make_request("capability", topic=topic)
+        rid = req["id"]
+        fut = asyncio.get_event_loop().create_future()
+        self.answers[rid] = fut
+        pkt = self.build_packet(peer_pubkey, "REQUEST", req)
+        print(f"📤 [Auto] 探測 {peer_pubkey[:12]}… 對 topic 的能力 (id={rid})")
+        await self.send_via_relay(peer_pubkey, pkt)
+        try:
+            resp = await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(f"capability 探測 {peer_pubkey[:12]}… 超過 {timeout}s")
+        finally:
+            self.answers.pop(rid, None)
+        if not resp.get("ok"):
+            raise RuntimeError(f"capability 失敗：{resp.get('error')}")
+        return resp.get("capability") or {}
+
     async def _synthesize_local(self, sender: str, app_payload: Dict):
         """收到 local 模式的 chunks：查回原始 query，用本機 AI 生成答案並印出。"""
         rid = app_payload.get("id", "")
@@ -436,38 +458,65 @@ async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str,
         await asyncio.sleep(0.05)
 
 
-async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
-                          rounds: int = 1, timeout: float = 180.0) -> Optional[str]:
-    """Autonomous：B 的 LLM 從 goal 自己想問題、送 peer、收答案。
-    rounds=1：單輪（formulate 一個問題就結束）。
-    rounds>1：多輪 follow-up —— LLM 每輪決定 ask（追問）或 done（收尾整理）；
-              hit 上限沒 done → 呼叫 summarize 把目前累積的 Q/A 整理成終答案。
-    回傳最終整理（或最後一輪的 peer 回答）；失敗回 None。"""
-    # 把 B 自己 share/ 的內容當成 B 的「觀點」帶上桌（discussion 模式）
-    # B 看自己的 share/ 不受 tier 限制，用最高 tier (personal) 收所有 zone
+async def autonomous_ask(node: "P2PNode", peer_pubkeys: List[str], goal: str,
+                          rounds: int = 1, timeout: float = 180.0,
+                          agent_meta: Optional[Dict[str, dict]] = None) -> Optional[str]:
+    """Autonomous 群組討論（Design A 完整版）：
+      Phase 1 capability scan：對所有 peer 平行送 capability 探測
+      Phase 2 targeted query：A 的 LLM 看 capability + 自己觀點 + 歷史 → 決定問誰什麼，或收尾
+    peer_pubkeys 只有一人時也能跑（capability scan 就只一個結果）。"""
+
+    # B 自己的觀點：share/ 不受 tier 限制，用 personal 收所有 zone
     own_chunks = app_layer._collect_ask_context(node.share, "personal")
+    agent_meta = agent_meta or {}
 
-    print(f"🎯 [Auto] 目標：{goal}（最多 {rounds} 輪）")
+    # pubkey → label（拿 agent_meta 的 name；沒名字就用 pubkey 前綴）
+    label_of: Dict[str, str] = {}
+    pub_of: Dict[str, str] = {}
+    for pk in peer_pubkeys:
+        name = (agent_meta.get(pk) or {}).get("name") or pk[:8]
+        # 同名衝突時加後綴
+        base = name
+        i = 2
+        while name in pub_of:
+            name = f"{base}#{i}"
+            i += 1
+        label_of[pk] = name
+        pub_of[name] = pk
+
+    print(f"🎯 [Auto] 目標：{goal}（最多 {rounds} 輪追問；對話對象 {len(peer_pubkeys)} 人）")
+    print(f"👥 [Auto] Peers: {list(label_of.values())}")
     if own_chunks:
-        print(f"🧠 [Auto] 我自己 share/ 有 {len(own_chunks)} 段資料可帶上桌（討論模式）")
-    else:
-        print(f"🧠 [Auto] 我的 share/ 沒內容 → 純資訊蒐集模式（沒有自己觀點可比較）")
+        print(f"🧠 [Auto] 我自己 share/ 有 {len(own_chunks)} 段資料可帶上桌")
 
-    history: List[Dict[str, str]] = []
-    last_answer: Optional[str] = None
+    # ── Phase 1：capability scan（平行）─────────────────────
+    print(f"\n══ Phase 1：capability scan ══")
+    async def probe(pk: str) -> tuple:
+        try:
+            cap = await node.send_capability_and_wait(pk, topic=goal, timeout=timeout)
+            return (label_of[pk], cap)
+        except Exception as e:
+            print(f"❌ [Auto] {label_of[pk]} 探測失敗：{e}")
+            return (label_of[pk], None)
+
+    probe_results = await asyncio.gather(*(probe(pk) for pk in peer_pubkeys))
+    cap_map: Dict[str, Dict] = {name: cap for name, cap in probe_results if cap is not None}
+    if not cap_map:
+        print("❌ [Auto] 所有 peer 都探測失敗，放棄")
+        return None
+    print(f"✅ [Auto] capability scan 完成，{len(cap_map)} 個 peer 有回應")
+
+    # ── Phase 2：targeted query loop ──────────────────────
+    print(f"\n══ Phase 2：targeted query（最多 {rounds} 輪）══")
+    history: List[Dict[str, str]] = []   # 每筆 {"peer", "q", "a"}
 
     for i in range(1, rounds + 1):
         print(f"── round {i}/{rounds} ──")
-
-        # Round 1 一定要問（formulate）；之後讓 LLM 自己決定 ask / done
         try:
-            if i == 1:
-                q = (await ai_client.formulate(goal, own_chunks=own_chunks, model=node.model)).strip()
-                step = {"action": "ask", "question": q}
-            else:
-                step = await ai_client.next_step(goal, history, own_chunks=own_chunks, model=node.model)
+            step = await ai_client.plan_question(
+                goal, own_chunks, cap_map, history, model=node.model)
         except Exception as e:
-            print(f"❌ [Auto] LLM 規劃失敗：{e}")
+            print(f"❌ [Auto] plan_question 失敗：{e}")
             break
 
         if step.get("action") == "done":
@@ -476,31 +525,37 @@ async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
             print(f"📝 [Auto] 最終整理：\n{summary}")
             return summary
 
+        peer_name = step.get("peer", "").strip()
         question = step.get("question", "").strip()
-        if not question:
-            print("⚠️ [Auto] 沒生出有效問題，提前結束")
+        if not peer_name or not question:
+            print("⚠️ [Auto] plan_question 回傳不完整，提前結束")
+            break
+        if peer_name not in pub_of:
+            print(f"⚠️ [Auto] LLM 指定不存在的 peer '{peer_name}'，提前結束")
             break
 
-        print(f"🤖 [Auto/r{i}] 問：{question}")
+        target_pk = pub_of[peer_name]
+        print(f"🤖 [Auto/r{i}] → {peer_name}: {question}")
         try:
-            last_answer = await node.send_ask_and_wait(
-                peer_pubkey, question, mode="remote", timeout=timeout)
+            answer = await node.send_ask_and_wait(target_pk, question, mode="remote", timeout=timeout)
         except Exception as e:
-            print(f"❌ [Auto] 取回答案失敗：{e}")
-            break
+            print(f"❌ [Auto] {peer_name} 回應失敗：{e}")
+            history.append({"peer": peer_name, "q": question, "a": f"(error: {e})"})
+            continue
 
-        history.append({"q": question, "a": last_answer or ""})
+        history.append({"peer": peer_name, "q": question, "a": answer})
 
-    # 達到輪數上限 LLM 還沒 done → 用 summarize 收尾
-    if rounds > 1 and history:
-        print(f"⏰ [Auto] 達到上限 {rounds} 輪，請 LLM 整理累積的 Q/A…")
+    # 跑滿 N 輪沒 done → group_summarize 收尾
+    if history:
+        print(f"⏰ [Auto] 達到上限 {rounds} 輪，請 LLM 整理…")
         try:
-            summary = await ai_client.summarize(goal, history, own_chunks=own_chunks, model=node.model)
+            summary = await ai_client.group_summarize(
+                goal, own_chunks, cap_map, history, model=node.model)
             print(f"📝 [Auto] 最終整理：\n{summary}")
             return summary
         except Exception as e:
-            print(f"❌ [Auto] 整理失敗：{e}")
-    return last_answer
+            print(f"❌ [Auto] group_summarize 失敗：{e}")
+    return None
 
 
 async def main(args):
@@ -513,7 +568,10 @@ async def main(args):
     if args.trust:
         trust.update(t.strip() for t in args.trust.split(",") if t.strip())
     if args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN":
-        trust.add(args.peer_pubkey)   # 要對話的 peer 自動視為信任
+        # --peer-pubkey 可逗號分隔（多 peer 群組討論）
+        for pk in (p.strip() for p in args.peer_pubkey.split(",")):
+            if pk:
+                trust.add(pk)
 
     node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share,
                    owner=args.name or "Anonymous", agent_meta=agent_list,
@@ -541,12 +599,15 @@ async def main(args):
 
         if args.auto:
             if not peer_set:
-                print("⚠️  --auto 需要 --peer-pubkey（要找誰）")
+                print("⚠️  --auto 需要 --peer-pubkey（要找誰；多個用逗號分隔）")
             elif not args.goal:
                 print("⚠️  --auto 需要 --goal \"高層目標\"")
             else:
+                # --peer-pubkey 接受逗號分隔多人（群組討論）
+                peer_pubkeys = [p.strip() for p in args.peer_pubkey.split(",") if p.strip()]
                 await asyncio.sleep(1)   # 等 relay register 完
-                await autonomous_ask(node, args.peer_pubkey, args.goal, rounds=args.rounds)
+                await autonomous_ask(node, peer_pubkeys, args.goal,
+                                     rounds=args.rounds, agent_meta=agent_list)
             relay_task.cancel()
             return
         if args.repl:
@@ -612,10 +673,10 @@ if __name__ == "__main__":
     # Relay 模式（跨不同 WiFi）
     parser.add_argument("--server-ip",   type=str, default=None,        help="[Relay] Server IP")
     parser.add_argument("--server-port", type=int, default=9000,        help="[Relay] Server port（預設 9000）")
-    parser.add_argument("--peer-pubkey", type=str, default="0xUNKNOWN", help="對方的公鑰（加密目標）")
+    parser.add_argument("--peer-pubkey", type=str, default="0xUNKNOWN", help="對方的公鑰（加密目標）；--auto 模式可逗號分隔多人做群組討論")
 
     # 應用層：要對對方做的檔案操作
-    parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list", "ask"], help="操作：read / append / list / ask")
+    parser.add_argument("--op",          type=str, default="read", choices=["read", "append", "list", "ask", "capability"], help="操作：read / append / list / ask / capability")
     parser.add_argument("--path",        type=str, default=None,        help="要操作的檔案（相對對方 share/，含 zone，如 read-only/notes.md）；list / ask 可省略")
     parser.add_argument("--content",     type=str, default=None,        help="append 的內容（支援 \\n 換行、\\t Tab）")
     parser.add_argument("--query",       type=str, default=None,        help="ask 要問對方 AI 的自然語言問題")

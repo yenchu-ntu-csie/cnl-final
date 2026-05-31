@@ -75,10 +75,11 @@ def _zones_for_tier(tier: str) -> set:
 # ── 應用層 JSON schema（解密後的明文）──────────────────────
 class FileRequest(BaseModel):
     id: str                              # 用來對應回應
-    op: str                              # "read" | "append" | "list" | "ask"
-    path: str = ""                       # 相對 share/ 的路徑；list 可留空；ask 不需要
+    op: str                              # "read" | "append" | "list" | "ask" | "capability"
+    path: str = ""                       # 相對 share/ 的路徑；list 可留空；ask/capability 不需要
     content: Optional[str] = None        # append 才需要
     query: Optional[str] = None          # ask 才需要：要問對方 AI 的自然語言問題
+    topic: Optional[str] = None          # capability 才需要：要探測對方對哪個題目有資料
     mode: str = DEFAULT_ASK_MODE         # ask 模式：remote（B 統整）/ local（A 自己讀資料）
 
 
@@ -89,7 +90,8 @@ class FileResponse(BaseModel):
     entries: Optional[List[str]] = None  # list 成功時回傳路徑清單（資料夾結尾帶 /）
     answer: Optional[str] = None         # ask remote 模式：B 的 AI 生成的純文字答覆
     context: Optional[List[str]] = None  # ask local 模式：B 回傳的原始 chunks（A 自己拿去生成）
-    error: Optional[str] = None          # path_denied / not_shared / permission_denied / not_found / bad_op / io_error
+    capability: Optional[Dict] = None    # capability 模式：{"relevant": bool, "topics": [...], "summary": str}
+    error: Optional[str] = None          # path_denied / not_shared / permission_denied / not_found / bad_op / io_error / missing_topic / missing_query
 
 
 # ── share/ 結構 ───────────────────────────────────────────
@@ -101,15 +103,19 @@ def ensure_share(share: str) -> None:
 
 # ── 送訊方：組裝 REQUEST payload ───────────────────────────
 def make_request(op: str, path: str = "", content: Optional[str] = None,
-                 query: Optional[str] = None, mode: str = DEFAULT_ASK_MODE) -> Dict:
+                 query: Optional[str] = None, topic: Optional[str] = None,
+                 mode: str = DEFAULT_ASK_MODE) -> Dict:
     """組一個 REQUEST payload（自動產生 id）。
-       read 不帶 content；list 可不帶 path；ask 用 query 帶問題、mode 選 remote/local。"""
+       read 不帶 content；list 可不帶 path；
+       ask 用 query 帶問題、mode 選 remote/local；
+       capability 用 topic 帶要探測的題目。"""
     req = FileRequest(
         id=uuid.uuid4().hex[:8],
         op=op,
         path=path or "",
         content=(content or "") if op == "append" else None,
         query=query if op == "ask" else None,
+        topic=topic if op == "capability" else None,
         mode=(mode if mode in ASK_MODES else DEFAULT_ASK_MODE) if op == "ask" else DEFAULT_ASK_MODE,
     )
     return req.model_dump(exclude_none=True)
@@ -276,6 +282,24 @@ async def _do_ask(req: FileRequest, share: str, owner: str, sender_pubkey: str,
     return FileResponse(id=req.id, ok=True, answer=text)
 
 
+async def _do_capability(req: FileRequest, share: str, owner: str, sender_pubkey: str,
+                           tier: str, model: Optional[str] = None) -> FileResponse:
+    """收 capability 探測：用本機 AI 看 tier 內 share/ 自我評估「對 topic 有沒有資料／哪些面向」。
+    回傳 capability={"relevant": bool, "topics": [...], "summary": str}。"""
+    if not req.topic:
+        return FileResponse(id=req.id, ok=False, error="missing_topic")
+    ctx = _collect_ask_context(share, tier)
+    print(f"   🔍 [Capability] topic={req.topic[:60]!r} tier={tier} ctx_chunks={len(ctx)}")
+    try:
+        cap = await ai_client.capability_probe(
+            owner=owner, peer_pubkey=sender_pubkey, tier=tier,
+            topic=req.topic, ctx_chunks=ctx, model=model,
+        )
+    except Exception as e:
+        return FileResponse(id=req.id, ok=False, error=f"ai_error: {e}")
+    return FileResponse(id=req.id, ok=True, capability=cap)
+
+
 async def handle_request(payload: Dict, share: str, *,
                           owner: str = "Anonymous", sender_pubkey: str = "",
                           tier: str = DEFAULT_TIER,
@@ -293,8 +317,12 @@ async def handle_request(payload: Dict, share: str, *,
     except ValueError:
         tier = DEFAULT_TIER           # 網路入口寬鬆：不合法的 tier 一律降為 common，不讓它 crash
 
-    op_label = (f"[{req.mode}] " + req.query[:40] + "…") if req.op == "ask" and req.query \
-        else (req.path or "(share 根目錄)")
+    if req.op == "ask" and req.query:
+        op_label = f"[{req.mode}] " + req.query[:40] + "…"
+    elif req.op == "capability" and req.topic:
+        op_label = f"topic={req.topic[:40]}"
+    else:
+        op_label = (req.path or "(share 根目錄)")
     print(f"   📂 [Request] id={req.id} op={req.op} tier={tier} {op_label}")
 
     if req.op == "list":
@@ -302,6 +330,9 @@ async def handle_request(payload: Dict, share: str, *,
     elif req.op == "ask":
         resp = await _do_ask(req, share, owner=owner, sender_pubkey=sender_pubkey,
                               tier=tier, model=model)
+    elif req.op == "capability":
+        resp = await _do_capability(req, share, owner=owner, sender_pubkey=sender_pubkey,
+                                     tier=tier, model=model)
     else:
         full, err = _check(req, share, tier)
         resp = FileResponse(id=req.id, ok=False, error=err) if err else _do_file_op(req, full)
@@ -311,6 +342,10 @@ async def handle_request(payload: Dict, share: str, *,
             extra = f" ({len(resp.entries)} 項)"
         elif resp.answer is not None:
             extra = " (AI 回應)"
+        elif resp.capability is not None:
+            rel = resp.capability.get("relevant")
+            topics = resp.capability.get("topics") or []
+            extra = f" (capability: relevant={rel}, topics={topics})"
         else:
             extra = ""
         print(f"   ↩️  [Response] id={resp.id} ok=True{extra}")
@@ -330,6 +365,16 @@ def handle_response(payload: Dict) -> None:
 
     if not resp.ok:
         print(f"   ❌ [Reply id={resp.id}] 失敗：{resp.error}")
+    elif resp.capability is not None:
+        cap = resp.capability
+        rel = "✅ 有相關" if cap.get("relevant") else "❌ 無相關"
+        topics = cap.get("topics") or []
+        summ = cap.get("summary", "")
+        print(f"   🔍 [Reply id={resp.id}] capability：{rel}")
+        if topics:
+            print(f"      面向：{', '.join(topics)}")
+        if summ:
+            print(f"      摘要：{summ}")
     elif resp.entries is not None:
         print(f"   📁 [Reply id={resp.id}] list 成功（{len(resp.entries)} 項）：")
         if not resp.entries:

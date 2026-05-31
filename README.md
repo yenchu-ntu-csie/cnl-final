@@ -2,9 +2,9 @@
 
 本地 AI agent 之間的端對端加密通訊層：節點以 **X25519 公鑰** 為身分，
 透過 relay server 轉發封包，但 **relay 只看得到密文與路由位址，無法解讀內容**。
-應用層提供 **read / append / list / ask** 四種操作；`ask` 讓對方的本地 Ollama
-依 `share/` 內容回答你的問題，支援 **autonomous 模式**（B 的 AI 自己想問題去問 A 的 AI，
-單輪或多輪 follow-up 都可）。
+應用層提供 **read / append / list / ask / capability** 五種操作；`ask` 讓對方的本地 Ollama
+依 `share/` 內容回答你的問題，支援 **autonomous 模式**（單輪、多輪 follow-up、或**三人以上群組討論** ——
+主持人對多 peer 平行 `capability` 能力探測 + 針對性追問 + 合成）。
 
 ---
 
@@ -16,7 +16,7 @@
 | `relay_server.py` | 中繼 | 依公鑰註冊 / 轉發封包（只看 header，看不到 payload） |
 | `p2p_node.py` | 網路層 | 封包、加解密、relay / 直連、信任白名單、CLI、REPL、autonomous loop |
 | `app_layer.py` | 應用層 | 解析 JSON、`share/` 四區的權限/路徑檢查、執行 read/append/list/ask |
-| `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate` / `next_step` / `summarize`（嚴格 prompt 分隔） |
+| `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate` / `next_step` / `summarize` / `capability_probe` / `plan_question` / `group_summarize`（嚴格 prompt 分隔） |
 | `agents.py` | 白名單 | 管理 `agents.json`（agent list + per-peer tier） |
 | `script/run_A.sh` `run_B.sh` | 便利腳本 | 一鍵跑收訊方 / 送訊方 |
 | `setup.md` | 文件 | 環境準備、兩台機器部署 |
@@ -65,10 +65,11 @@ python3 agents.py remove <對方公鑰>
 ```jsonc
 {
   "id": "8da83bdf",
-  "op": "read | append | list | ask",
-  "path": "read-only/notes.md",   // read/append 必填；list 可省；ask 不用
+  "op": "read | append | list | ask | capability",
+  "path": "read-only/notes.md",   // read/append 必填；list 可省；ask/capability 不用
   "content": "appended line\n",   // append 才需要
   "query": "你最喜歡哪本書?",       // ask 才需要
+  "topic": "AI 安全",              // capability 才需要：要探測的題目
   "mode": "remote | local"        // ask 才用，預設 remote
 }
 ```
@@ -78,11 +79,12 @@ python3 agents.py remove <對方公鑰>
 {
   "id": "8da83bdf",
   "ok": true,
-  "content": "...",     // read 成功
-  "entries": ["read-only/", "read-only/notes.md", ...],   // list 成功
-  "answer":  "...",     // ask remote 成功
-  "context": ["..."],   // ask local 成功（原始 chunks）
-  "error":   "not_shared | permission_denied | path_denied | not_found | bad_op | is_a_directory | io_error | missing_query | ai_error"
+  "content": "...",                                          // read 成功
+  "entries": ["read-only/", "read-only/notes.md", ...],      // list 成功
+  "answer":  "...",                                          // ask remote 成功
+  "context": ["..."],                                        // ask local 成功（原始 chunks）
+  "capability": {"relevant": true, "topics": [...], "summary": "..."},  // capability 成功
+  "error":   "not_shared | permission_denied | path_denied | not_found | bad_op | is_a_directory | io_error | missing_query | missing_topic | ai_error"
 }
 ```
 
@@ -94,6 +96,11 @@ python3 agents.py remove <對方公鑰>
 
 兩模式都通過同一條 tier ACL，不是安全機制、是策略選擇。
 
+### `capability`（能力探測，用於群組討論）
+A 的 AI 看自己 tier 內 share/，自評對某 topic 有沒有資料、哪些面向能說。
+群組討論 (`--auto --peer-pubkey "p1,p2,..."`) 時，主持人會平行探測所有 peer，
+再針對「有料的人」深問。Tier ACL 仍 enforce（peer 只能評估自己 tier 內看得到的 zone）。
+
 ---
 
 ## 4. 五種使用方式
@@ -104,6 +111,7 @@ python3 agents.py remove <對方公鑰>
 | **REPL 互動** | 連續多輪輸入 | `--repl`（預設純文字 = ask；`/read /append /list /local /remote /help`） |
 | **Autonomous 單輪** | B 的 AI 自己想問題 | `--auto --goal "高層目標"` |
 | **Autonomous 多輪** | B 看答案決定追問或收尾 | `--auto --rounds 5 --goal "..."` |
+| **Autonomous 群組討論** | 主持人對多 peer 平行能力探測 + 針對性追問 | `--auto --peer-pubkey "p1,p2,p3" --rounds 4 --goal "..."` |
 | **檔案操作** | read / append / list | `--op read --path read-only/notes.md` |
 | **直連模式** | 同一 LAN，不經 relay | `--peer-ip <IP> --peer-port <PORT>`（雙向 RESPONSE 已支援） |
 
@@ -195,6 +203,7 @@ NODE_B=(python3 ../p2p_node.py --port 18002 --key-file linkedout_B.key --name Bo
 | T7 | `"${NODE_B[@]}" --op ask --query "三項朋友的興趣" --mode local` | B 收 chunks → 自己 Ollama 合成 |
 | T8 | `"${NODE_B[@]}" --auto --goal "我想知道朋友最喜歡哪本書"` | **B 的 AI 自動生問題 → 送 A → 收答案**（autonomous 單輪） |
 | T8b | `"${NODE_B[@]}" --auto --rounds 5 --goal "我想完整了解我這個朋友"` | **多輪 follow-up**：LLM 看答案決定追問或收尾 |
+| T8c | **三人群組討論**（見 §5.5b） | **平行能力探測 + 主持人選人追問 + 多 peer 合成** |
 | T9 | `"${NODE_B[@]}" --repl` | 進互動模式；打字 = ask，`/list`、`/read`、`/append`、`/local`、`/remote`、`/quit` |
 
 預期 T8（單輪）輸出範例：
@@ -256,6 +265,76 @@ python3 ../agents.py set-tier "$B_PUB" task
 
 升 `personal` 再測一次：`set-tier "$B_PUB" personal` → 重啟 A → `read personal/diary.md` 成功。
 
+### 5.5b 三人群組討論 demo（亮點）
+
+主持人 Carol 平行探測 Alice、Bob 對某題目的能力，再針對性追問、合成。
+
+```bash
+cd ~/Documents/大三/CNL/cnl-final
+mkdir -p _group && cd _group
+
+# 三把身分
+A_PUB=$(python3 -c "import sys;sys.path.insert(0,'..');import e2ee;print(e2ee.public_hex(e2ee.load_or_create_identity('linkedout_A.key')))")
+B_PUB=$(python3 -c "import sys;sys.path.insert(0,'..');import e2ee;print(e2ee.public_hex(e2ee.load_or_create_identity('linkedout_B.key')))")
+C_PUB=$(python3 -c "import sys;sys.path.insert(0,'..');import e2ee;print(e2ee.public_hex(e2ee.load_or_create_identity('linkedout_C.key')))")
+python3 ../agents.py add "$A_PUB" --name Alice --tier common
+python3 ../agents.py add "$B_PUB" --name Bob   --tier common
+python3 ../agents.py add "$C_PUB" --name Carol --tier personal
+
+# 三個獨立 share/，各放對立觀點
+for d in share_A share_B share_C; do mkdir -p "$d/read-only" "$d/read&append" "$d/task" "$d/personal"; done
+printf '# Alice：強監管派\nAI 安全是當前最重要的議題。必須強制監管、設定紅線、要求透明度。\n' > share_A/read-only/views.md
+printf '# Bob：自由發展派\nAI 安全議題被誇大了。AI 是工具，風險來自人類使用方式，不是技術本身。\n' > share_B/read-only/views.md
+printf '# Carol：平衡派\n高風險領域強監管，低風險領域留空間給創新。國際協作很重要。\n' > share_C/read-only/views.md
+```
+
+開四個終端機：
+```bash
+# 終端 ① relay
+python3 ../relay_server.py --port 9000
+
+# 終端 ② Alice
+python3 ../p2p_node.py --port 8001 --key-file linkedout_A.key --name Alice --share share_A \
+  --server-ip 127.0.0.1 --server-port 9000
+
+# 終端 ③ Bob
+python3 ../p2p_node.py --port 8002 --key-file linkedout_B.key --name Bob --share share_B \
+  --server-ip 127.0.0.1 --server-port 9000
+
+# 終端 ④ Carol（主持人，--auto 對兩個 peer）
+python3 ../p2p_node.py --port 8003 --key-file linkedout_C.key --name Carol --share share_C \
+  --server-ip 127.0.0.1 --server-port 9000 \
+  --peer-pubkey "$A_PUB,$B_PUB" --auto --rounds 4 --goal "AI 安全該不該強監管"
+```
+
+預期 Carol 輸出：
+```
+🎯 [Auto] 目標：AI 安全該不該強監管（最多 4 輪追問；對話對象 2 人）
+👥 [Auto] Peers: ['Alice', 'Bob']
+🧠 [Auto] 我自己 share/ 有 1 段資料可帶上桌
+
+══ Phase 1：capability scan ══
+📤 探測 Alice... 📤 探測 Bob...
+🔍 Alice: ✅ 有相關  面向：[AI 安全, 強制監管]
+🔍 Bob:   ❌ 無相關（小模型偶有保守判斷；plan_question 仍會視需要追問）
+
+══ Phase 2：targeted query ══
+── round 1/4 ── 🤖 → Alice: 在您看來，哪些方面需要強監管？
+  Alice 回：算法透明度、資料隱私、自動化決策...
+── round 2/4 ── 🤖 → Bob: 您認為AI安全需要強監管嗎？
+  Bob 回：不需要，會扼殺創新...
+── round 3/4 ── ✅ LLM 在 2 輪後決定收尾
+📝 最終整理：Alice 提出...應該強監管...Bob 認為...會扼殺創新...
+```
+
+亮點：
+- **Phase 1 平行探測**（用 `asyncio.gather`）—— 不會 N 個 peer 慢慢串行
+- **Phase 2 智慧路由** —— LLM 看 capability map 選人選題目，不浪費 token 盲問
+- **summary 明確點名** —— 「Alice 認為 X / Bob 認為 Y / 你認為 Z」對比清楚
+- **協定 + 加密 + tier ACL 全程沿用** —— relay 看到的還是 🔒 payload encrypted
+
+---
+
 ### 5.6 觀察點：relay log
 任何時候看終端 ① relay：
 ```
@@ -312,8 +391,8 @@ python3 relay_server.py --port 9000
 | `--trust` | 額外臨時信任的公鑰，逗號分隔（不寫檔） |
 | `--share` | 本機分享資料夾（預設 `share/`） |
 | `--server-ip` `--server-port` | Relay 模式：relay server 位址 |
-| `--peer-pubkey` | 對方的公鑰（送訊／REPL／autonomous 必填） |
-| `--op` | `read` / `append` / `list` / `ask` |
+| `--peer-pubkey` | 對方的公鑰（送訊／REPL／autonomous 必填）；`--auto` 可用逗號分隔多人做群組討論 |
+| `--op` | `read` / `append` / `list` / `ask` / `capability` |
 | `--path` | 操作目標（含 zone，例：`read-only/notes.md`） |
 | `--content` | append 內容（支援 `\n` 換行、`\t` Tab） |
 | `--query` | ask 的問題（自然語言） |
@@ -357,7 +436,8 @@ python3 relay_server.py --port 9000
 - [x] REPL 互動模式
 - [x] Autonomous 單輪（B 的 AI 自己想問題去問 A 的 AI）
 - [x] Autonomous 多輪（B 看回答決定追問 / 收尾，達上限自動 summarize）
+- [x] Autonomous 群組討論（`capability` op + 平行能力探測 + 主持人選人追問 + 多 peer 合成）
+- [x] 跨節點聯合檢索（capability scan + targeted query — proposal 的 federated retrieval 雛形）
 - [x] 直連模式雙向 RESPONSE（同 LAN 可不經 relay）
-- [ ] 跨節點聯合檢索（同時問多個 peer 並合成）
 - [ ] 大 vault 的真實 retrieval（目前是把整個 zone 全塞進 context）
 - [ ] NAT 穿透（已驗證打洞在 CGNAT 走不通，先放著）
