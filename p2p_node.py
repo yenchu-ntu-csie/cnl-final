@@ -56,6 +56,7 @@ class P2PNode:
         self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, ...}，未來放 ACL 用
         self.model = model                       # 給 ask op 用的 Ollama 模型；None 走 env/auto
         self.pending: Dict[str, str] = {}        # local 模式：request_id → 原始 query（收到 chunks 時用 A 自己的 AI 生成）
+        self.answers: Dict[str, "asyncio.Future"] = {}   # autonomous 模式：request_id → 等 RESPONSE 的 future
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -140,8 +141,40 @@ class P2PNode:
                 await self._synthesize_local(sender, app_payload)
             else:
                 app_layer.handle_response(app_payload)
+            # 若 autonomous 流程在等這個 id，喚醒它
+            rid = app_payload.get("id")
+            fut = self.answers.get(rid) if rid else None
+            if fut and not fut.done():
+                fut.set_result(app_payload)
         else:
             print(f"   ⚠️ 未知封包類型: {packet.type}")
+
+    async def send_ask_and_wait(self, peer_pubkey: str, query: str,
+                                  mode: str = "remote",
+                                  timeout: float = 180.0) -> str:
+        """送一個 ask 給 peer 並等 RESPONSE。回傳 answer 純文字。
+        v1 只支援 relay 模式 + remote mode（peer 端 AI 統整）。"""
+        if mode != "remote":
+            raise NotImplementedError("autonomous v1 只支援 remote mode")
+        if not self.srv_writer:
+            raise RuntimeError("autonomous_ask 需要 relay 模式（--server-ip）")
+
+        req = app_layer.make_request("ask", query=query, mode="remote")
+        rid = req["id"]
+        fut = asyncio.get_event_loop().create_future()
+        self.answers[rid] = fut
+        pkt = self.build_packet(peer_pubkey, "REQUEST", req)
+        print(f"📤 [Auto] 送出 REQUEST id={rid} op=ask query={query!r}")
+        await self.send_via_relay(peer_pubkey, pkt)
+        try:
+            resp = await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(f"等對方回應超過 {timeout}s")
+        finally:
+            self.answers.pop(rid, None)
+        if not resp.get("ok"):
+            raise RuntimeError(f"對方回錯誤：{resp.get('error')}")
+        return resp.get("answer") or ""
 
     async def _synthesize_local(self, sender: str, app_payload: Dict):
         """收到 local 模式的 chunks：查回原始 query，用本機 AI 生成答案並印出。"""
@@ -403,6 +436,29 @@ async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str,
         await asyncio.sleep(0.05)
 
 
+async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
+                          timeout: float = 180.0) -> Optional[str]:
+    """單輪 autonomous：B 自己 LLM 從 goal 生成問題 → 送 peer → 收答案 → 印出。
+    回傳 peer 的純文字回答（失敗回 None）。"""
+    print(f"🎯 [Auto] 目標：{goal}")
+    try:
+        question = (await ai_client.formulate(goal, model=node.model)).strip()
+    except Exception as e:
+        print(f"❌ [Auto] 本機 AI 無法生成問題：{e}")
+        return None
+    if not question:
+        print("❌ [Auto] 本機 AI 沒生出有效問題（空字串）")
+        return None
+    print(f"🤖 [Auto] 我自己的 AI 想出的問題：{question}")
+    try:
+        answer = await node.send_ask_and_wait(peer_pubkey, question, mode="remote", timeout=timeout)
+    except Exception as e:
+        print(f"❌ [Auto] 取回答案失敗：{e}")
+        return None
+    print(f"💬 [Auto] 完成 ↑ 對方回答已在上面顯示")
+    return answer
+
+
 async def main(args):
     priv = e2ee.load_or_create_identity(args.key_file)
     app_layer.ensure_share(args.share)   # 確保 share/read-only 與 share/read&append 存在
@@ -439,6 +495,16 @@ async def main(args):
 
         peer_set = args.peer_pubkey and args.peer_pubkey != "0xUNKNOWN"
 
+        if args.auto:
+            if not peer_set:
+                print("⚠️  --auto 需要 --peer-pubkey（要找誰）")
+            elif not args.goal:
+                print("⚠️  --auto 需要 --goal \"高層目標\"")
+            else:
+                await asyncio.sleep(1)   # 等 relay register 完
+                await autonomous_ask(node, args.peer_pubkey, args.goal)
+            relay_task.cancel()
+            return
         if args.repl:
             if not peer_set:
                 print("⚠️  REPL 模式需要 --peer-pubkey（要跟誰對話）")
@@ -512,6 +578,8 @@ if __name__ == "__main__":
     parser.add_argument("--mode",        type=str, default=app_layer.DEFAULT_ASK_MODE, choices=list(app_layer.ASK_MODES),
                         help="ask 模式：remote=對方 AI 幫你統整（預設）；local=對方只回原始資料、你自己的 AI 生成")
     parser.add_argument("--repl",        action="store_true",           help="進入互動模式：在 prompt 持續輸入問題/指令（需 --peer-pubkey）")
+    parser.add_argument("--auto",        action="store_true",           help="autonomous 模式：本機 AI 從 --goal 自己生成問題、自動送給 peer、收答案（單輪）")
+    parser.add_argument("--goal",        type=str, default=None,        help="--auto 用的高層目標／主題，自然語言（例：「我想知道朋友最喜歡的書」）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 

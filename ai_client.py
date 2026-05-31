@@ -119,6 +119,41 @@ def _call_sync(model: Optional[str], messages: list) -> str:
     return content.strip()
 
 
+_FORMULATE_SYSTEM = (
+    "You are an autonomous agent acting on behalf of your user. "
+    "Given the user's high-level goal, generate ONE specific, focused question "
+    "to ask another agent (representing a different person) that will help achieve the goal.\n"
+    "\n"
+    "Rules:\n"
+    "1. Output ONLY the question text — no preamble, no quotes, no explanation.\n"
+    "2. Keep it short (one sentence).\n"
+    "3. The question is addressed to the other person's agent in the second person."
+)
+
+
+def _clean_formulated(text: str) -> str:
+    """模型可能多加引號 / 前綴 / 換行，這裡剝乾淨成單一問句。"""
+    t = text.strip()
+    # 取第一行（多行的話只要第一句）
+    t = t.splitlines()[0].strip() if t else ""
+    # 去掉成對的外層引號（中英）
+    for pair in (('"', '"'), ("'", "'"), ("「", "」"), ("『", "』")):
+        if t.startswith(pair[0]) and t.endswith(pair[1]):
+            t = t[1:-1].strip()
+    return t
+
+
+async def formulate(goal: str, model: Optional[str] = None) -> str:
+    """B 端自己 LLM：把高層 goal 轉成「要送給 peer 的一個具體問題」。
+    回傳純文字問題（剝掉引號 / preamble）。"""
+    messages = [
+        {"role": "system", "content": _FORMULATE_SYSTEM},
+        {"role": "user", "content": f"Goal: {goal}"},
+    ]
+    raw = await asyncio.to_thread(_call_sync, model, messages)
+    return _clean_formulated(raw)
+
+
 async def answer(owner: str, peer_pubkey: str, tier: str, query_text: str,
                  ctx_chunks: Optional[Iterable[str]] = None,
                  model: Optional[str] = None) -> str:
