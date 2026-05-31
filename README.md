@@ -3,7 +3,8 @@
 本地 AI agent 之間的端對端加密通訊層：節點以 **X25519 公鑰** 為身分，
 透過 relay server 轉發封包，但 **relay 只看得到密文與路由位址，無法解讀內容**。
 應用層提供 **read / append / list / ask** 四種操作；`ask` 讓對方的本地 Ollama
-依 `share/` 內容回答你的問題，支援 **autonomous 模式**（B 的 AI 自己想問題去問 A 的 AI）。
+依 `share/` 內容回答你的問題，支援 **autonomous 模式**（B 的 AI 自己想問題去問 A 的 AI，
+單輪或多輪 follow-up 都可）。
 
 ---
 
@@ -15,7 +16,7 @@
 | `relay_server.py` | 中繼 | 依公鑰註冊 / 轉發封包（只看 header，看不到 payload） |
 | `p2p_node.py` | 網路層 | 封包、加解密、relay / 直連、信任白名單、CLI、REPL、autonomous loop |
 | `app_layer.py` | 應用層 | 解析 JSON、`share/` 四區的權限/路徑檢查、執行 read/append/list/ask |
-| `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate`（嚴格 prompt 分隔） |
+| `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate` / `next_step` / `summarize`（嚴格 prompt 分隔） |
 | `agents.py` | 白名單 | 管理 `agents.json`（agent list + per-peer tier） |
 | `script/run_A.sh` `run_B.sh` | 便利腳本 | 一鍵跑收訊方 / 送訊方 |
 | `setup.md` | 文件 | 環境準備、兩台機器部署 |
@@ -102,6 +103,7 @@ python3 agents.py remove <對方公鑰>
 | **單一指令** | 一次性問答 | `--op ask --query "問題"` |
 | **REPL 互動** | 連續多輪輸入 | `--repl`（預設純文字 = ask；`/read /append /list /local /remote /help`） |
 | **Autonomous 單輪** | B 的 AI 自己想問題 | `--auto --goal "高層目標"` |
+| **Autonomous 多輪** | B 看答案決定追問或收尾 | `--auto --rounds 5 --goal "..."` |
 | **檔案操作** | read / append / list | `--op read --path read-only/notes.md` |
 | **直連模式** | 同一 LAN，不經 relay | `--peer-ip <IP> --peer-port <PORT>`（雙向 RESPONSE 已支援） |
 
@@ -191,20 +193,42 @@ NODE_B=(python3 ../p2p_node.py --port 18002 --key-file linkedout_B.key --name Bo
 | T5 | `"${NODE_B[@]}" --op append --path read-only/about_alice.md --content "改" ` | ❌ `permission_denied` |
 | T6 | `"${NODE_B[@]}" --op ask --query "你最喜歡哪本書?" --mode remote` | A 的 Ollama 答《雪崩》 |
 | T7 | `"${NODE_B[@]}" --op ask --query "三項朋友的興趣" --mode local` | B 收 chunks → 自己 Ollama 合成 |
-| T8 | `"${NODE_B[@]}" --auto --goal "我想知道朋友最喜歡哪本書"` | **B 的 AI 自動生問題 → 送 A → 收答案**（autonomous） |
+| T8 | `"${NODE_B[@]}" --auto --goal "我想知道朋友最喜歡哪本書"` | **B 的 AI 自動生問題 → 送 A → 收答案**（autonomous 單輪） |
+| T8b | `"${NODE_B[@]}" --auto --rounds 5 --goal "我想完整了解我這個朋友"` | **多輪 follow-up**：LLM 看答案決定追問或收尾 |
 | T9 | `"${NODE_B[@]}" --repl` | 進互動模式；打字 = ask，`/list`、`/read`、`/append`、`/local`、`/remote`、`/quit` |
 
-預期 T8 輸出範例：
+預期 T8（單輪）輸出範例：
 ```
-🎯 [Auto] 目標：我想知道朋友最喜歡哪本書
-🤖 [Auto] 我自己的 AI 想出的問題：What book does your friend enjoy reading most?
+🎯 [Auto] 目標：我想知道朋友最喜歡哪本書（最多 1 輪）
+── round 1/1 ──
+🤖 [Auto/r1] 問：What book does your friend enjoy reading most?
 📤 [Auto] 送出 REQUEST id=... op=ask
 🤖 [Reply id=...] AI 回應：
 ┌─────────────
 │ Alice 最喜歡的書是《雪崩》Snow Crash。
 └─────────────
-💬 [Auto] 完成
 ```
+
+預期 T8b（多輪）輸出範例：
+```
+🎯 [Auto] 目標：我想完整了解我這個朋友（最多 5 輪）
+── round 1/5 ──
+🤖 [Auto/r1] 問：你最近在忙什麼？
+🤖 [Reply id=...] AI 回應：│ 我在做計網期末專案 LinkedOut...
+── round 2/5 ──
+🤖 [Auto/r2] 問：你的興趣愛好有哪些？
+🤖 [Reply id=...] AI 回應：│ 科幻小說《雪崩》《三體》、Rust、登山...
+── round 3/5 ──
+✅ [Auto] LLM 在 2 輪後決定收尾
+📝 [Auto] 最終整理：
+你的朋友 Alice 正在做 LinkedOut 期末專案，喜歡科幻、Rust 和登山...
+```
+
+多輪行為說明：
+- round 1 一定會 ask（用 `formulate` 生成第一個問題）
+- round 2 起 LLM 看歷史 Q/A 自己決定：再問（`{"action":"ask"}`）或收尾（`{"action":"done"}`）
+- 跑滿 `--rounds N` 還沒 done → 呼叫 `summarize` 強制整理收尾
+- LLM 若早早 done → 直接用它給的 summary 結束
 
 ### 5.5 tier 升級 demo（亮點）
 
@@ -296,7 +320,8 @@ python3 relay_server.py --port 9000
 | `--mode` | ask 模式：`remote`（預設） / `local` |
 | `--model` | ask 用的 Ollama 模型；不指定走 `LINKEDOUT_MODEL` / 自動偵測 |
 | `--repl` | 進入 REPL 互動模式 |
-| `--auto` `--goal` | autonomous 單輪：本機 AI 從 goal 自己想問題 |
+| `--auto` `--goal` | autonomous 模式：本機 AI 從 goal 自己想問題、送 peer、收答案 |
+| `--rounds` | autonomous 最多輪數（預設 1；>1 啟用 follow-up，LLM 自己決定何時收尾） |
 | `--peer-ip` `--peer-port` | 直連模式（同 LAN，不經 relay；現已支援雙向 RESPONSE） |
 
 ---
@@ -331,8 +356,8 @@ python3 relay_server.py --port 9000
 - [x] `ask` 操作（remote / local 兩模式）
 - [x] REPL 互動模式
 - [x] Autonomous 單輪（B 的 AI 自己想問題去問 A 的 AI）
+- [x] Autonomous 多輪（B 看回答決定追問 / 收尾，達上限自動 summarize）
 - [x] 直連模式雙向 RESPONSE（同 LAN 可不經 relay）
-- [ ] Autonomous 多輪（B 看回答決定追問）
 - [ ] 跨節點聯合檢索（同時問多個 peer 並合成）
 - [ ] 大 vault 的真實 retrieval（目前是把整個 zone 全塞進 context）
 - [ ] NAT 穿透（已驗證打洞在 CGNAT 走不通，先放著）

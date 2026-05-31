@@ -437,26 +437,61 @@ async def repl_loop(node: "P2PNode", peer_pubkey: str, peer_label: str,
 
 
 async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
-                          timeout: float = 180.0) -> Optional[str]:
-    """單輪 autonomous：B 自己 LLM 從 goal 生成問題 → 送 peer → 收答案 → 印出。
-    回傳 peer 的純文字回答（失敗回 None）。"""
-    print(f"🎯 [Auto] 目標：{goal}")
-    try:
-        question = (await ai_client.formulate(goal, model=node.model)).strip()
-    except Exception as e:
-        print(f"❌ [Auto] 本機 AI 無法生成問題：{e}")
-        return None
-    if not question:
-        print("❌ [Auto] 本機 AI 沒生出有效問題（空字串）")
-        return None
-    print(f"🤖 [Auto] 我自己的 AI 想出的問題：{question}")
-    try:
-        answer = await node.send_ask_and_wait(peer_pubkey, question, mode="remote", timeout=timeout)
-    except Exception as e:
-        print(f"❌ [Auto] 取回答案失敗：{e}")
-        return None
-    print(f"💬 [Auto] 完成 ↑ 對方回答已在上面顯示")
-    return answer
+                          rounds: int = 1, timeout: float = 180.0) -> Optional[str]:
+    """Autonomous：B 的 LLM 從 goal 自己想問題、送 peer、收答案。
+    rounds=1：單輪（formulate 一個問題就結束）。
+    rounds>1：多輪 follow-up —— LLM 每輪決定 ask（追問）或 done（收尾整理）；
+              hit 上限沒 done → 呼叫 summarize 把目前累積的 Q/A 整理成終答案。
+    回傳最終整理（或最後一輪的 peer 回答）；失敗回 None。"""
+    print(f"🎯 [Auto] 目標：{goal}（最多 {rounds} 輪）")
+    history: List[Dict[str, str]] = []
+    last_answer: Optional[str] = None
+
+    for i in range(1, rounds + 1):
+        print(f"── round {i}/{rounds} ──")
+
+        # Round 1 一定要問（formulate）；之後讓 LLM 自己決定 ask / done
+        try:
+            if i == 1:
+                q = (await ai_client.formulate(goal, model=node.model)).strip()
+                step = {"action": "ask", "question": q}
+            else:
+                step = await ai_client.next_step(goal, history, model=node.model)
+        except Exception as e:
+            print(f"❌ [Auto] LLM 規劃失敗：{e}")
+            break
+
+        if step.get("action") == "done":
+            summary = step.get("summary", "").strip() or "(空)"
+            print(f"✅ [Auto] LLM 在 {i-1} 輪後決定收尾")
+            print(f"📝 [Auto] 最終整理：\n{summary}")
+            return summary
+
+        question = step.get("question", "").strip()
+        if not question:
+            print("⚠️ [Auto] 沒生出有效問題，提前結束")
+            break
+
+        print(f"🤖 [Auto/r{i}] 問：{question}")
+        try:
+            last_answer = await node.send_ask_and_wait(
+                peer_pubkey, question, mode="remote", timeout=timeout)
+        except Exception as e:
+            print(f"❌ [Auto] 取回答案失敗：{e}")
+            break
+
+        history.append({"q": question, "a": last_answer or ""})
+
+    # 達到輪數上限 LLM 還沒 done → 用 summarize 收尾
+    if rounds > 1 and history:
+        print(f"⏰ [Auto] 達到上限 {rounds} 輪，請 LLM 整理累積的 Q/A…")
+        try:
+            summary = await ai_client.summarize(goal, history, model=node.model)
+            print(f"📝 [Auto] 最終整理：\n{summary}")
+            return summary
+        except Exception as e:
+            print(f"❌ [Auto] 整理失敗：{e}")
+    return last_answer
 
 
 async def main(args):
@@ -502,7 +537,7 @@ async def main(args):
                 print("⚠️  --auto 需要 --goal \"高層目標\"")
             else:
                 await asyncio.sleep(1)   # 等 relay register 完
-                await autonomous_ask(node, args.peer_pubkey, args.goal)
+                await autonomous_ask(node, args.peer_pubkey, args.goal, rounds=args.rounds)
             relay_task.cancel()
             return
         if args.repl:
@@ -578,8 +613,9 @@ if __name__ == "__main__":
     parser.add_argument("--mode",        type=str, default=app_layer.DEFAULT_ASK_MODE, choices=list(app_layer.ASK_MODES),
                         help="ask 模式：remote=對方 AI 幫你統整（預設）；local=對方只回原始資料、你自己的 AI 生成")
     parser.add_argument("--repl",        action="store_true",           help="進入互動模式：在 prompt 持續輸入問題/指令（需 --peer-pubkey）")
-    parser.add_argument("--auto",        action="store_true",           help="autonomous 模式：本機 AI 從 --goal 自己生成問題、自動送給 peer、收答案（單輪）")
+    parser.add_argument("--auto",        action="store_true",           help="autonomous 模式：本機 AI 從 --goal 自己生成問題、自動送給 peer、收答案")
     parser.add_argument("--goal",        type=str, default=None,        help="--auto 用的高層目標／主題，自然語言（例：「我想知道朋友最喜歡的書」）")
+    parser.add_argument("--rounds",      type=int, default=1,           help="--auto 最多輪數（>1 啟用多輪 follow-up；LLM 自己決定何時收尾）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 
