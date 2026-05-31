@@ -443,7 +443,16 @@ async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
     rounds>1：多輪 follow-up —— LLM 每輪決定 ask（追問）或 done（收尾整理）；
               hit 上限沒 done → 呼叫 summarize 把目前累積的 Q/A 整理成終答案。
     回傳最終整理（或最後一輪的 peer 回答）；失敗回 None。"""
+    # 把 B 自己 share/ 的內容當成 B 的「觀點」帶上桌（discussion 模式）
+    # B 看自己的 share/ 不受 tier 限制，用最高 tier (personal) 收所有 zone
+    own_chunks = app_layer._collect_ask_context(node.share, "personal")
+
     print(f"🎯 [Auto] 目標：{goal}（最多 {rounds} 輪）")
+    if own_chunks:
+        print(f"🧠 [Auto] 我自己 share/ 有 {len(own_chunks)} 段資料可帶上桌（討論模式）")
+    else:
+        print(f"🧠 [Auto] 我的 share/ 沒內容 → 純資訊蒐集模式（沒有自己觀點可比較）")
+
     history: List[Dict[str, str]] = []
     last_answer: Optional[str] = None
 
@@ -453,10 +462,10 @@ async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
         # Round 1 一定要問（formulate）；之後讓 LLM 自己決定 ask / done
         try:
             if i == 1:
-                q = (await ai_client.formulate(goal, model=node.model)).strip()
+                q = (await ai_client.formulate(goal, own_chunks=own_chunks, model=node.model)).strip()
                 step = {"action": "ask", "question": q}
             else:
-                step = await ai_client.next_step(goal, history, model=node.model)
+                step = await ai_client.next_step(goal, history, own_chunks=own_chunks, model=node.model)
         except Exception as e:
             print(f"❌ [Auto] LLM 規劃失敗：{e}")
             break
@@ -486,7 +495,7 @@ async def autonomous_ask(node: "P2PNode", peer_pubkey: str, goal: str,
     if rounds > 1 and history:
         print(f"⏰ [Auto] 達到上限 {rounds} 輪，請 LLM 整理累積的 Q/A…")
         try:
-            summary = await ai_client.summarize(goal, history, model=node.model)
+            summary = await ai_client.summarize(goal, history, own_chunks=own_chunks, model=node.model)
             print(f"📝 [Auto] 最終整理：\n{summary}")
             return summary
         except Exception as e:
