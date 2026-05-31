@@ -14,6 +14,41 @@
   - 決策層級「規則自動選 mode」**不做** —— 權限該擋的已在 tier ACL 擋過，不在 mode 這層重複。
 - Files: [ai_client.py](ai_client.py), [app_layer.py](app_layer.py), [p2p_node.py](p2p_node.py), [agents.py](agents.py), [e2ee.py](e2ee.py), [relay_server.py](relay_server.py).
 
+---
+
+## 🧭 架構主線：agent 協作 → 知識路由（收斂後的拓展 roadmap）
+
+**一句話定位**：個人 AI agent 的去中心化「知識路由」——你問一題、不必知道誰懂；查詢沿信任圖找到對的人，
+答案沿信任鏈帶回。價值＝**協作效率**（單一 agent / 通用 LLM 答不出分散在不同專業者手上的私有知識）。
+
+**測量harness（已建）**：[scenario/D_gpu](scenario/D_gpu/) —— 跨領域專業 + 稀疏金鑰圖 + 不可猜的私有事實。
+客觀打分：`baseline 0/3 → v1 2/3 →（S4 目標）3/3`。每加一階回來重跑看分數爬。
+
+**能力階梯（每階是上一階小 delta、可獨立 demo、回 testbed 量分）**
+- **S0 單 peer** ✅（Felicity）
+- **S1 群組：capability-scan + 問直接朋友** ✅（Felicity，`--auto --peer-pubkey A,B`）——
+  用「即時 capability 探測」當動態 peer-model，零維護表。testbed 實測 2/3。
+- **S4 顯式知識路由（多跳、每跳限權、沿信任鏈回傳）** 📝 已出規格 → [plan-s4-routing.zh.md](plan-s4-routing.zh.md)
+  - schema（`RouteQuery`/`RouteAnswer`）可先動 `app_layer.py`；路由/轉發/聚合在 `p2p_node.py`（**等 Felicity push 後 rebase 再做**）。
+  - 「要轉給誰」＝遞迴 `capability_probe`；驗收＝scenario D 2/3→3/3、印 `via: Bob→Carol→Dave`。
+  - 註：原 S2（tier-gated）已被 capability 探測涵蓋；原 S3（轉介提示）在稀疏圖無效，已併入 S4。
+- **S5 學習式 peer-model（效率優化，最後做）** ⬜
+  - 從回饋學「誰答得被採用」→ 加權（distance-vector 式）→ 不再每次盲掃，targeted 路由、訊息量下降。
+  - 存在 `agents.json`（加 `expertise` / 學習 stats，向下相容：缺欄＝即時探測 fallback）。
+
+**testbed 拓展（量化主線、給報告用）** ⬜
+- 更多場景（新目錄 `scenario/E_*`，不動 D 的 orchestrator）：改變圖的深度（2 跳 vs 3 跳）、廣度（多分支）。
+- 效率指標：訊息數 / 延遲 / LLM 呼叫次數（S1 盲掃 vs S5 targeted 的對照）。
+- 穩定性：多次跑取平均（LLM 有隨機性，報告要附 n 次的分數分佈）。
+- ablation：`ttl=0`、拿掉某條信任邊 → 證明「那 1 分是多跳帶來的」。
+
+**報告 / 敘事素材** ⬜
+- 「知識路由表」對照真實網路路由（self=directly-connected、peer=next-hop、capability 廣播=路由通告、回饋=metric、ttl/hops）。
+- 0→2→3 的可量化故事 + provenance 路徑圖。
+- 誠實邊界：多跳機密取捨、路由非新演算法（定位成「實作系統」閃開撞文獻）。
+
+---
+
 ## Next goals (rough priority)
 
 ### 1. Real RAG for `ask`
