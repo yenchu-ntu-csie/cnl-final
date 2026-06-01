@@ -17,6 +17,12 @@ import ai_client
 # （要涵蓋慢的 ask，例如 ollama 冷啟動載入模型）
 DIRECT_REPLY_TIMEOUT = 200
 
+# ── S4 路由的硬化上限（防灌爆 / 防無限增長）──
+ROUTE_MAX_TTL = 4          # TTL 上限（擋被灌大數值無限轉發）
+ROUTE_MAX_QUERY = 2000     # ROUTE_QUERY 文字長度上限
+ROUTE_MAX_ANSWER = 8000    # 單筆 ROUTE_ANSWER 長度上限
+ROUTE_STATE_TTL = 600      # 路由狀態（seen/back/pool）保留秒數，過期回收
+
 # ==========================================
 # 1. 資料模型 (照你們的定義，微調以適應 Pydantic v2)
 # ==========================================
@@ -61,6 +67,7 @@ class P2PNode:
         self.route_back: Dict[str, str] = {}     # qid → 上游 pubkey（中間人把答案往這裡帶回）
         self.route_seen: Set[str] = set()        # qid 去重（防迴圈 / 重複轉發）
         self.route_pool: Dict[str, list] = {}    # qid → [{"answer","via"}]（我是 origin 時收集答案）
+        self.route_ts: Dict[str, float] = {}     # qid → 首見時間（過期回收用）
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -220,13 +227,39 @@ class P2PNode:
                                 {"qid": qid, "answer": answer, "via": via})
         await self.send_via_relay(to_pubkey, pkt)
 
+    def _route_gc(self):
+        """回收過期的路由狀態，避免 route_seen/back/pool 無限增長。"""
+        cutoff = time.time() - ROUTE_STATE_TTL
+        for q in [q for q, t in self.route_ts.items() if t < cutoff]:
+            self.route_ts.pop(q, None); self.route_seen.discard(q)
+            self.route_back.pop(q, None); self.route_pool.pop(q, None)
+
+    @staticmethod
+    def _valid_route_query(p: Dict):
+        """驗證 ROUTE_QUERY payload；回傳 (qid, query, ttl, path) 或 None（不合法→丟棄）。"""
+        qid, query, ttl, path = p.get("qid"), p.get("query"), p.get("ttl"), p.get("path")
+        if not (isinstance(qid, str) and 1 <= len(qid) <= 64):
+            return None
+        if not (isinstance(query, str) and 1 <= len(query) <= ROUTE_MAX_QUERY):
+            return None
+        if not (isinstance(ttl, int) and 0 <= ttl <= ROUTE_MAX_TTL):
+            return None
+        if not (isinstance(path, list) and all(isinstance(h, str) for h in path)):
+            return None
+        return qid, query, ttl, path
+
     async def _handle_route_query(self, sender: str, p: Dict):
-        """收到 ROUTE_QUERY：去重 → 自評(有料就回答) → ttl>0 就轉給信任 peer。"""
-        qid = p.get("qid"); query = p.get("query", ""); ttl = int(p.get("ttl", 0))
-        path = list(p.get("path") or [])
-        if not qid or qid in self.route_seen:
+        """收到 ROUTE_QUERY：驗證 → 去重 → 自評(有料就回答) → ttl>0 就轉給信任 peer。"""
+        self._route_gc()
+        v = self._valid_route_query(p)
+        if v is None:
+            print("   ⚠️ [Route] 丟棄不合法的 ROUTE_QUERY")
+            return
+        qid, query, ttl, path = v
+        if qid in self.route_seen:
             return
         self.route_seen.add(qid)
+        self.route_ts[qid] = time.time()
         self.route_back[qid] = sender            # 答案要往這個上游帶回
         me = self.my_pubkey
         print(f"   🧭 [Route] 收到 qid={qid[:8]} ttl={ttl} path={[h[:6] for h in path]}")
@@ -259,7 +292,11 @@ class P2PNode:
 
     async def _handle_route_answer(self, sender: str, p: Dict):
         """收到 ROUTE_ANSWER：我是 origin → 收集；我是中間人 → 沿信任鏈往上游帶回。"""
-        qid = p.get("qid"); ans = p.get("answer", ""); via = list(p.get("via") or [])
+        qid = p.get("qid")
+        if not isinstance(qid, str):
+            return
+        ans = str(p.get("answer", ""))[:ROUTE_MAX_ANSWER]          # 長度上限
+        via = [h for h in (p.get("via") or []) if isinstance(h, str)]
         if qid in self.route_pool:               # 我是 origin
             self.route_pool[qid].append({"answer": ans, "via": via})
             print(f"   🧭 [Route] origin 收到答案 via={[h[:6] for h in via]}")
@@ -271,8 +308,11 @@ class P2PNode:
         """origin：對信任圖發 ROUTE_QUERY，沿鏈收集多來源答案，整理成終答案。"""
         if not self.srv_writer:
             raise RuntimeError("route_ask 需要 relay 模式（--server-ip）")
+        self._route_gc()
+        ttl = max(0, min(int(ttl), ROUTE_MAX_TTL))   # clamp TTL
         qid = uuid.uuid4().hex[:8]
         self.route_pool[qid] = []
+        self.route_ts[qid] = time.time()
         me = self.my_pubkey
         targets = [pk for pk in self.trust if pk != me]
         print(f"🧭 [Route] origin 發 qid={qid} ttl={ttl} 給 {len(targets)} 個直接朋友")
@@ -293,6 +333,13 @@ class P2PNode:
             elif n > 0 and (time.time() - start) > min_wait and (time.time() - stable_since) > 25:
                 break                            # 等夠 min_wait 且穩定 25s 才早收
         pool = self.route_pool.get(qid, [])
+        # 去重：相同答案只留一筆（多路徑可能回傳同一份）
+        _seen, _dedup = set(), []
+        for it in pool:
+            k = (it.get("answer") or "").strip()
+            if k and k not in _seen:
+                _seen.add(k); _dedup.append(it)
+        pool = _dedup
         print(f"🧭 [Route] 收集到 {len(pool)} 筆答案，整理中…")
 
         # 聚合：保留每一筆的「具體值」(版本/埠/名稱/數字)，不要被討論式 summary 洗掉。
