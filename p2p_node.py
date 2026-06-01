@@ -222,9 +222,11 @@ class P2PNode:
                                 {"qid": qid, "query": query, "ttl": ttl, "path": path})
         await self.send_via_relay(to_pubkey, pkt)
 
-    async def _send_route_answer(self, to_pubkey: str, qid: str, answer: str, via: List[str]):
+    async def _send_route_answer(self, to_pubkey: str, qid: str, answer: str,
+                                  who: str, tier: str, via: List[str]):
+        # who = 作答者名字；tier = 作答時用的(對直接上游的)tier；via = 回程經過的中繼名字
         pkt = self.build_packet(to_pubkey, "ROUTE_ANSWER",
-                                {"qid": qid, "answer": answer, "via": via})
+                                {"qid": qid, "answer": answer, "who": who, "tier": tier, "via": via})
         await self.send_via_relay(to_pubkey, pkt)
 
     def _route_gc(self):
@@ -277,7 +279,8 @@ class P2PNode:
             try:
                 ans = await ai_client.answer(self.owner, sender, tier,
                                              query, ctx_chunks=own, model=self.model)
-                await self._send_route_answer(sender, qid, ans, [me])
+                # who=我的名字、tier=我對直接上游用的 tier、via 從空開始（回程逐跳補中繼名）
+                await self._send_route_answer(sender, qid, ans, who=self.owner, tier=tier, via=[])
                 print(f"   🧭 [Route] 我({self.owner})有料 → 回 ROUTE_ANSWER 給上游")
             except Exception as e:
                 print(f"   ⚠️ [Route] 作答失敗：{e}")
@@ -296,13 +299,16 @@ class P2PNode:
         if not isinstance(qid, str):
             return
         ans = str(p.get("answer", ""))[:ROUTE_MAX_ANSWER]          # 長度上限
+        who = str(p.get("who") or "?")
+        tier = str(p.get("tier") or "?")
         via = [h for h in (p.get("via") or []) if isinstance(h, str)]
         if qid in self.route_pool:               # 我是 origin
-            self.route_pool[qid].append({"answer": ans, "via": via})
-            print(f"   🧭 [Route] origin 收到答案 via={[h[:6] for h in via]}")
-        elif qid in self.route_back:             # 我是中間人 → 往上游 relay
+            self.route_pool[qid].append({"answer": ans, "who": who, "tier": tier, "via": via})
+            path = " → ".join([self.owner] + via + [who])
+            print(f"   🧭 [Route] origin 收到答案 ← {who}（tier={tier}）path: {path}")
+        elif qid in self.route_back:             # 我是中間人 → 往上游 relay（把自己名字補進 via）
             up = self.route_back[qid]
-            await self._send_route_answer(up, qid, ans, via + [self.my_pubkey])
+            await self._send_route_answer(up, qid, ans, who=who, tier=tier, via=via + [self.owner])
 
     async def route_ask(self, goal: str, ttl: int = 2, window: float = 200.0) -> str:
         """origin：對信任圖發 ROUTE_QUERY，沿鏈收集多來源答案，整理成終答案。"""
@@ -342,10 +348,14 @@ class P2PNode:
         pool = _dedup
         print(f"🧭 [Route] 收集到 {len(pool)} 筆答案，整理中…")
 
+        # 每筆答案的「forward 路徑」= origin → (回程中繼名反推) → 作答者。
+        def _path(it):
+            return " → ".join([self.owner] + it.get("via", []) + [it.get("who", "?")])
+
         # 聚合：保留每一筆的「具體值」(版本/埠/名稱/數字)，不要被討論式 summary 洗掉。
         # 直接用現成 ai_client._call_sync（不改 ai_client.py）下一個 fact-preserving prompt。
         replies = "\n".join(
-            f"[{i+1}] (via {'→'.join(h[:6] for h in it['via'])}) {it['answer']}"
+            f"[{i+1}] (from {it.get('who','?')} via {_path(it)}) {it['answer']}"
             for i, it in enumerate(pool)) or "(no replies)"
         messages = [
             {"role": "system", "content":
@@ -367,12 +377,16 @@ class P2PNode:
             merged = await asyncio.to_thread(ai_client._call_sync, self.model, messages)
         except Exception as e:
             merged = f"(整理失敗：{e})"
-        # 附上來源(provenance)：每筆專家原始回覆 + 經過的路徑。
-        # 這既是正確的產品行為(顯示出處)，也保證被檢索到的具體值不會被弱模型的 merge 洗掉。
-        sources = "\n".join(
-            f"  - via {'→'.join(h[:6] for h in it['via'])}: {it['answer']}"
-            for it in pool) or "  (無)"
-        summary = f"{merged}\n\n── 來源 (provenance) ──\n{sources}"
+        # ── 揭露稽核（provenance）= demo 的「看得見的多跳 + 每跳 tier」──
+        # 只記 metadata + 答案片段，不外洩任何私密檔案路徑/內容。
+        audit_lines = []
+        for it in pool:
+            snippet = " ".join((it.get("answer") or "").split())[:90]
+            audit_lines.append(
+                f"  ← {it.get('who','?'):<8} tier={it.get('tier','?'):<8} "
+                f"path: {_path(it)}\n        “{snippet}…”")
+        audit = "\n".join(audit_lines) or "  (無人回覆)"
+        summary = f"{merged}\n\n🔎 揭露稽核（provenance）— 這次答案組合了 {len(pool)} 個來源\n{audit}"
         print(f"📝 [Route] 最終整理：\n{summary}")
         return summary
 
