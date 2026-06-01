@@ -36,20 +36,24 @@
   - **已知**：end-to-end 分數會在 2/3↔3/3、v1 0↔2 之間跳 —— 因為 `ai_client.capability_probe` 太嚴，
     peer 常自評「不相關」就不作答 → 事實沒被吐出來。**這是 Felicity 正在修的 prompt**；她 push 後合併、重量分數。
   - 註：原 S2（tier-gated）已被 capability 探測涵蓋；原 S3（轉介提示）在稀疏圖無效，已併入 S4。
-- **S5 學習式 peer-model（效率優化，最後做）** ⬜
-  - 從回饋學「誰答得被採用」→ 加權（distance-vector 式）→ 不再每次盲掃，targeted 路由、訊息量下降。
-  - 存在 `agents.json`（加 `expertise` / 學習 stats，向下相容：缺欄＝即時探測 fallback）。
+- **S5 學習式智慧路由（reputation-targeted）** ✅ 做完（commit 51c6336 / eee10c6）
+  - `agents.py`：per-peer `rep {keyword: score}` + `topic_keywords/rep_score/bump_rep`（向下相容：缺 rep=冷啟動）。
+  - `p2p_node._pick_next_hops`：冷啟動 flood → 學到後只往高分 next-hop（+1 探索）；origin 與每跳都用。
+  - `_credit`：ROUTE_ANSWER 回來就替「帶回來的 next-hop」在該主題加分（in-memory + 寫回 agents.json）。
+  - **實測收斂**（run_converge，Bob 接 4 友、只 Carol 通往答案）：fan-out **4→2**、CUDA 11.4 每次命中。
+  - 單元測試 `test_routing.py`（冷→flood、學到→targeted、per-topic）。
 
-**testbed 拓展（量化主線、給報告用）** ⬜
-- 更多場景（新目錄 `scenario/E_*`，不動 D 的 orchestrator）：改變圖的深度（2 跳 vs 3 跳）、廣度（多分支）。
-- 效率指標：訊息數 / 延遲 / LLM 呼叫次數（S1 盲掃 vs S5 targeted 的對照）。
-- 穩定性：多次跑取平均（LLM 有隨機性，報告要附 n 次的分數分佈）。
-- ablation：`ttl=0`、拿掉某條信任邊 → 證明「那 1 分是多跳帶來的」。
+- **離線存轉 store-and-forward** ✅（commit 9b3bc78）：relay 暫存離線 peer 封包、上線補投（取代丟棄）；
+  `test_storeforward.py` 整合測試過。經典網路韌性 + demo robustness（晚到/慢節點不掉訊息）。
 
-**報告 / 敘事素材** ⬜
-- 「知識路由表」對照真實網路路由（self=directly-connected、peer=next-hop、capability 廣播=路由通告、回饋=metric、ttl/hops）。
-- 0→2→3 的可量化故事 + provenance 路徑圖。
-- 誠實邊界：多跳機密取捨、路由非新演算法（定位成「實作系統」閃開撞文獻）。
+**testbed 拓展（量化主線、給報告用）**
+- ✅ `scenario/D_gpu/run_eval.py`：n 次、四組、**per-fact 命中率** + JSON（對 LLM 隨機性 robust）。
+- ✅ `scenario/D_gpu/run_converge.py`：寬拓樸量「fan-out 收斂」+ ttl=0/空誘餌 ablation。
+- ⬜ 可選：更多場景（`scenario/E_*`）、延遲/LLM 呼叫次數指標、跑 n 次取分佈平均。
+
+**報告 / 敘事素材** ✅ 彙整於 [REPORT_NOTES.zh.md](REPORT_NOTES.zh.md)
+- 架構分層圖、信任圖多跳路由圖、知識路由表↔真實路由對照、收斂數據、誠實 limitations、future work。
+- ⬜ demo 錄影（明天，5 機）：runbook 在 [demo/DEMO.zh.md](demo/DEMO.zh.md)。
 
 ---
 
