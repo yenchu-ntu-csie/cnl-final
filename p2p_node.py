@@ -641,6 +641,43 @@ async def autonomous_ask(node: "P2PNode", peer_pubkeys: List[str], goal: str,
     print(f"\n══ Phase 2：targeted query（最多 {rounds} 輪）══")
     history: List[Dict[str, str]] = []   # 每筆 {"peer", "q", "a"}
 
+    # Fallback：所有 peer 都自評 relevant=False（小模型常見的過度保守）
+    # → 強制各問一輪（用 formulate 從 goal 生問題）。每用掉一輪算 rounds 一次。
+    if cap_map and all(not (c or {}).get("relevant") for c in cap_map.values()):
+        print(f"⚠️ [Auto] 所有 peer 都自評無相關（很可能是小模型過度保守）")
+        print(f"   → fallback：強制對每個 peer 各問一輪")
+        for fallback_i, (peer_name, peer_pk) in enumerate(list(pub_of.items()), 1):
+            if fallback_i > rounds:
+                break
+            print(f"── fallback round {fallback_i}/{rounds} ──")
+            try:
+                q = (await ai_client.formulate(goal, own_chunks=own_chunks, model=node.model)).strip()
+            except Exception as e:
+                print(f"❌ [Auto] formulate 失敗：{e}")
+                break
+            print(f"🤖 [Auto/fb{fallback_i}] → {peer_name}: {q}")
+            try:
+                answer = await node.send_ask_and_wait(peer_pk, q, mode="remote", timeout=timeout)
+            except Exception as e:
+                print(f"❌ [Auto] {peer_name} 回應失敗：{e}")
+                history.append({"peer": peer_name, "q": q, "a": f"(error: {e})"})
+                continue
+            history.append({"peer": peer_name, "q": q, "a": answer})
+        # fallback 用掉的輪數要從 rounds 扣
+        rounds = max(0, rounds - len(history))
+        if rounds == 0:
+            # 直接 summarize 收尾
+            print(f"⏰ [Auto] fallback 用完額度，整理…")
+            try:
+                summary = await ai_client.group_summarize(
+                    goal, own_chunks, cap_map, history, model=node.model)
+                print(f"📝 [Auto] 最終整理：\n{summary}")
+                return summary
+            except Exception as e:
+                print(f"❌ [Auto] group_summarize 失敗：{e}")
+                return None
+        print(f"\n══ Phase 2 續：剩餘 {rounds} 輪 plan_question ══")
+
     for i in range(1, rounds + 1):
         print(f"── round {i}/{rounds} ──")
         try:

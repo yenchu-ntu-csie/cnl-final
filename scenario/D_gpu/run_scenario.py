@@ -133,6 +133,12 @@ def run_v1(goal, pub):
            "--auto", "--goal", goal, "--rounds", "3"]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     out = res.stdout + res.stderr
+    # debug：存 Bob v1 完整輸出，事後檢查 capability / round 細節
+    try:
+        with open(os.path.join(RUN, "bob_v1.log"), "w", encoding="utf-8") as f:
+            f.write(out)
+    except Exception:
+        pass
     # 取「最終整理」之後的文字當答案
     marker = "最終整理"
     idx = out.rfind(marker)
