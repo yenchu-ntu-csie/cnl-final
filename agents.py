@@ -75,6 +75,44 @@ def get_tier(meta: dict) -> str:
         return DEFAULT_TIER
 
 
+# ── 智慧路由用的「聲望」(reputation)：學「往這個 next-hop 轉，該主題答得回來」──
+# meta["rep"] = {keyword: score}；像 distance-vector 的 metric，從回饋累積。
+_STOP = {"the", "and", "for", "with", "your", "you", "this", "that", "what",
+         "how", "are", "into", "from", "我想", "請給", "關鍵", "設定", "做法"}
+
+def topic_keywords(text: str, k: int = 8) -> list:
+    """從一段文字粗略抽主題關鍵字（小寫、去短詞/停用詞）。中英皆可，純啟發式。"""
+    import re as _re
+    toks = _re.findall(r"[A-Za-z0-9_.\-]{3,}|[一-鿿]{2,}", (text or "").lower())
+    out, seen = [], set()
+    for t in toks:
+        if t in _STOP or t in seen:
+            continue
+        seen.add(t); out.append(t)
+        if len(out) >= k:
+            break
+    return out
+
+
+def rep_score(meta: dict, kws) -> float:
+    """這個 peer 對這些關鍵字的累積聲望分數（越高 = 越該往他轉）。"""
+    rep = (meta or {}).get("rep", {}) or {}
+    return float(sum(rep.get(kw, 0) for kw in kws))
+
+
+def bump_rep(pubkey: str, kws, path: str = DEFAULT_PATH, amount: float = 1.0) -> None:
+    """回饋學習：某 next-hop 把某主題的答案帶回來了 → 替它在這些關鍵字加分（持久化）。"""
+    if not kws:
+        return
+    a = load(path)
+    if pubkey not in a:
+        return
+    rep = a[pubkey].setdefault("rep", {})
+    for kw in kws:
+        rep[kw] = float(rep.get(kw, 0)) + amount
+    save(a, path)
+
+
 def add(pubkey: str, name: str = "", path: str = DEFAULT_PATH,
         tier: str = None) -> Dict[str, dict]:
     if not _valid_pubkey(pubkey):

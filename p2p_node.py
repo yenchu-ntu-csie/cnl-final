@@ -51,7 +51,7 @@ class P2PNode:
                  trust: Optional[Set[str]] = None, host: str = "0.0.0.0",
                  share: str = "share", owner: str = "Anonymous",
                  agent_meta: Optional[Dict[str, dict]] = None,
-                 model: Optional[str] = None):
+                 model: Optional[str] = None, agents_file: str = "agents.json"):
         self.host = host
         self.port = port
         self.priv = priv
@@ -59,7 +59,8 @@ class P2PNode:
         self.trust: Set[str] = trust or set()    # 信任白名單（允許的寄件者公鑰）
         self.share = share                       # 分享資料夾（read-only / read&append，權限在 app_layer 檢查）
         self.owner = owner                       # 給本機 AI 介紹自己身分用（ask op）
-        self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, ...}，未來放 ACL 用
+        self.agent_meta = agent_meta or {}       # pubkey → {name, tier?, rep?, ...}
+        self.agents_file = agents_file           # 寫回學到的 reputation 用
         self.model = model                       # 給 ask op 用的 Ollama 模型；None 走 env/auto
         self.pending: Dict[str, str] = {}        # local 模式：request_id → 原始 query（收到 chunks 時用 A 自己的 AI 生成）
         self.answers: Dict[str, "asyncio.Future"] = {}   # autonomous 模式：request_id → 等 RESPONSE 的 future
@@ -68,6 +69,7 @@ class P2PNode:
         self.route_seen: Set[str] = set()        # qid 去重（防迴圈 / 重複轉發）
         self.route_pool: Dict[str, list] = {}    # qid → [{"answer","via"}]（我是 origin 時收集答案）
         self.route_ts: Dict[str, float] = {}     # qid → 首見時間（過期回收用）
+        self.route_kw: Dict[str, list] = {}      # qid → 主題關鍵字（智慧路由評分 / 回饋學習用）
         self.server = None
         self.srv_reader: Optional[asyncio.StreamReader] = None
         self.srv_writer: Optional[asyncio.StreamWriter] = None
@@ -263,6 +265,7 @@ class P2PNode:
         self.route_seen.add(qid)
         self.route_ts[qid] = time.time()
         self.route_back[qid] = sender            # 答案要往這個上游帶回
+        self.route_kw[qid] = agents.topic_keywords(query)   # 智慧路由評分用
         me = self.my_pubkey
         print(f"   🧭 [Route] 收到 qid={qid[:8]} ttl={ttl} path={[h[:6] for h in path]}")
 
@@ -285,13 +288,39 @@ class P2PNode:
             except Exception as e:
                 print(f"   ⚠️ [Route] 作答失敗：{e}")
 
-        # 轉發：往「信任、不在 path、非來源」的 peer（每跳都在信任邊上 = 每跳限權）
+        # 轉發：智慧路由 —— 用學到的 reputation 挑 next-hop，不再盲目 flood
         if ttl > 0:
-            nexts = [pk for pk in self.trust if pk not in path and pk != sender and pk != me]
-            for pk in nexts:
+            cands = [pk for pk in self.trust if pk not in path and pk != sender and pk != me]
+            chosen, mode = self._pick_next_hops(cands, self.route_kw[qid])
+            for pk in chosen:
                 await self._send_route_query(pk, qid, query, ttl - 1, path + [me])
-            if nexts:
-                print(f"   🧭 [Route] ttl={ttl}→{ttl-1} 轉發給 {len(nexts)} 個信任 peer")
+            if chosen:
+                print(f"   🧭 [Route] ttl={ttl}→{ttl-1} 轉發給 {len(chosen)}/{len(cands)} 個 peer（{mode}）")
+
+    def _pick_next_hops(self, cands: List[str], kws: list):
+        """智慧路由：有學到聲望就只往「該主題分高」的 next-hop 轉(+1 探索)；冷啟動則 flood。
+        回傳 (要轉發的 peer 清單, 模式字串)。"""
+        if not cands:
+            return [], "none"
+        scored = sorted(((agents.rep_score(self.agent_meta.get(c) or {}, kws), c)
+                         for c in cands), key=lambda x: -x[0])
+        positives = [c for s, c in scored if s > 0]
+        if positives:
+            zeros = [c for s, c in scored if s == 0]
+            return positives + zeros[:1], "targeted+explore"   # 學到的路由 + 1 個探索
+        return cands, "cold-flood"                              # 還沒學到 → flood 學習
+
+    def _credit(self, peer: str, kws: list):
+        """回饋學習：替 next-hop 在這些主題關鍵字加聲望（in-memory + 寫回 agents.json）。"""
+        if not kws or peer not in self.agent_meta:
+            return
+        rep = self.agent_meta[peer].setdefault("rep", {})        # in-memory 立即生效
+        for kw in kws:
+            rep[kw] = float(rep.get(kw, 0)) + 1.0
+        try:
+            agents.bump_rep(peer, kws, self.agents_file)          # 持久化（跨次保留）
+        except Exception:
+            pass
 
     async def _handle_route_answer(self, sender: str, p: Dict):
         """收到 ROUTE_ANSWER：我是 origin → 收集；我是中間人 → 沿信任鏈往上游帶回。"""
@@ -302,6 +331,11 @@ class P2PNode:
         who = str(p.get("who") or "?")
         tier = str(p.get("tier") or "?")
         via = [h for h in (p.get("via") or []) if isinstance(h, str)]
+
+        # 回饋學習：答案從 sender(我的直接 next-hop) 帶回來了 → 替它在這主題加聲望。
+        # 下次同主題就會優先往這個方向轉（distance-vector 式收斂）。
+        self._credit(sender, self.route_kw.get(qid, []))
+
         if qid in self.route_pool:               # 我是 origin
             self.route_pool[qid].append({"answer": ans, "who": who, "tier": tier, "via": via})
             path = " → ".join([self.owner] + via + [who])
@@ -319,9 +353,12 @@ class P2PNode:
         qid = uuid.uuid4().hex[:8]
         self.route_pool[qid] = []
         self.route_ts[qid] = time.time()
+        self.route_kw[qid] = agents.topic_keywords(goal)
         me = self.my_pubkey
-        targets = [pk for pk in self.trust if pk != me]
-        print(f"🧭 [Route] origin 發 qid={qid} ttl={ttl} 給 {len(targets)} 個直接朋友")
+        cands = [pk for pk in self.trust if pk != me]
+        # origin 也用智慧路由：學到聲望後只往對的直接朋友發（冷啟動才全發）
+        targets, mode = self._pick_next_hops(cands, self.route_kw[qid])
+        print(f"🧭 [Route] origin 發 qid={qid} ttl={ttl} 給 {len(targets)}/{len(cands)} 個直接朋友（{mode}）")
         for pk in targets:
             await self._send_route_query(pk, qid, goal, ttl, [me])
 
@@ -807,7 +844,7 @@ async def main(args):
 
     node = P2PNode(port=args.port, priv=priv, trust=trust, share=args.share,
                    owner=args.name or "Anonymous", agent_meta=agent_list,
-                   model=args.model)
+                   model=args.model, agents_file=args.agents_file)
 
     label = args.name or node.my_pubkey[:16]
     print("=" * 60)
