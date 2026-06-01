@@ -512,6 +512,9 @@ class P2PNode:
                 shown = [p[:16] + "…" for p in msg["online"]]
                 print(f"   👥 Online: {shown}")
 
+            elif msg["type"] == "QUEUED":
+                print(f"   📦→📥 對方離線，relay 已暫存（佇列深度 {msg.get('depth')}），上線後補投")
+
             elif msg["type"] == "ERROR":
                 print(f"   ⚠️ Relay error: {msg.get('reason')}")
 
