@@ -884,7 +884,7 @@ async def main(args):
                 print("⚠️  --route 需要 --goal \"高層目標\"")
             else:
                 await asyncio.sleep(1)   # 等 relay register 完
-                await node.route_ask(args.goal, ttl=args.ttl)
+                await node.route_ask(args.goal, ttl=args.ttl, window=args.window)
             relay_task.cancel()
             return
         if args.repl:
@@ -965,6 +965,7 @@ if __name__ == "__main__":
     parser.add_argument("--rounds",      type=int, default=1,           help="--auto 最多輪數（>1 啟用多輪 follow-up；LLM 自己決定何時收尾）")
     parser.add_argument("--route",       action="store_true",           help="S4 知識路由：對信任圖發 ROUTE_QUERY，多跳找人、沿信任鏈帶回（用 --goal、--ttl）")
     parser.add_argument("--ttl",         type=int, default=2,           help="--route 的最大跳數（預設 2；Bob→Carol→Dave 需要 2）")
+    parser.add_argument("--window",      type=float, default=200.0,     help="--route 收集答案的最長秒數（慢模型 × 深跳要調大；預設 200）")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 
