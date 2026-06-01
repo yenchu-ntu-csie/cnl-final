@@ -37,9 +37,14 @@ GT = 3 條關鍵事實；分數 = 最終答案命中幾條。
 |---|---|---|
 | baseline | ~0/3 | Bob 自己猜不到任何私有特定值 |
 | v1（問直接朋友） | **2/3** | 拿到 Alice（3500/Q4_K_M）+ Carol（lab-7f3a/41641）；**缺 Dave（11.4/Above 4G），因為 Bob 搆不到 Dave** |
-| 多跳 S4（未做） | 目標 3/3 | Carol 代轉到 Dave，補上驅動 |
+| 多跳 S4（已實作） | 目標 3/3 | Carol 代轉到 Dave，補上驅動 |
 
-→ 缺的那 1/3 = **「為什麼需要多跳」的可量化證據**。之後做完 S4 回來重跑，看分數爬到 3/3。
+→ 缺的那 1/3 = **「為什麼需要多跳」的可量化證據**。
+
+**S4 已實作**（`p2p_node.py` 的 `ROUTE_QUERY`/`ROUTE_ANSWER` + `route_ask`，CLI `--route --ttl`）。
+跑 S4 對照：`.venv/bin/python scenario/D_gpu/run_s4_demo.py`（baseline vs v1 vs S4）。
+傳輸已驗證正確（Bob→Carol→Dave 送達、2 跳回程 Dave→Carol→Bob）；S4 也套用 **每跳 tier ACL**
+（answering 端只用「對直接上游的 tier」作答，common 經路由也拿不到 personal）。
 
 ## 檔案
 - `seeds/<who>/read-only/*.md` — 各 agent 的專業種子資料

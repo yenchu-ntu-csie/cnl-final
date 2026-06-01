@@ -157,7 +157,7 @@ Note its public/LAN IP (the script prints it).
 
 ### Mode B — Direct LAN (same WiFi)
 
-No relay needed; both nodes talk over LAN sockets. RESPONSE round-trip is relay-only today, so direct mode is fine for one-shot demos but the AI's reply prints on the *receiver's* terminal, not the sender's.
+No relay needed; both nodes talk over LAN sockets. The QUERY→RESPONSE round-trip now completes in direct mode too: the sender keeps its connection open and the receiver writes the RESPONSE back on the same socket, so the reply prints on the **sender's** terminal (within `DIRECT_REPLY_TIMEOUT`, default 200s to cover a slow `ask`).
 
 ## 8. Run two nodes
 
