@@ -931,9 +931,24 @@ async def main(args):
             if req:
                 node.register_pending(req)   # local 模式：先記住 query
                 packet = node.build_packet(args.peer_pubkey, "REQUEST", req)
+                rid = req["id"]
+                # 註冊 future 讓我們可以等回應或超時
+                fut = asyncio.get_event_loop().create_future()
+                node.answers[rid] = fut
                 detail = req.get("path") or req.get("query", "")
-                print(f"📤 送出 REQUEST id={req['id']} op={req['op']} {detail}")
+                print(f"📤 送出 REQUEST id={rid} op={req['op']} {detail}")
                 await node.send_via_relay(args.peer_pubkey, packet)
+                # 等回應或超時，然後自動退出（沒回應通常代表對方靜默拒收或離線）
+                try:
+                    await asyncio.wait_for(fut, timeout=args.reply_timeout)
+                    print(f"✓ 收到回應，結束。")
+                except asyncio.TimeoutError:
+                    print(f"⏱️  {args.reply_timeout}s 內未收到回應 "
+                          f"——對方可能靜默拒收（白名單不含我）或已離線。")
+                finally:
+                    node.answers.pop(rid, None)
+            relay_task.cancel()
+            return
 
         await relay_task
 
@@ -991,6 +1006,7 @@ if __name__ == "__main__":
     parser.add_argument("--route",       action="store_true",           help="S4 知識路由：對信任圖發 ROUTE_QUERY，多跳找人、沿信任鏈帶回（用 --goal、--ttl）")
     parser.add_argument("--ttl",         type=int, default=2,           help="--route 的最大跳數（預設 2；Bob→Carol→Dave 需要 2）")
     parser.add_argument("--window",      type=float, default=200.0,     help="--route 收集答案的最長秒數（慢模型 × 深跳要調大；預設 200）")
+    parser.add_argument("--reply-timeout", type=float, default=10.0,     help="單發 --op ask/read/append/list 等回應的最長秒數（沒回 → 自動退出，預期被靜默拒收或對方離線）；預設 10s")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 
