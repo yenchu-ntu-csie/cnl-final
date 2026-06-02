@@ -392,7 +392,6 @@ class P2PNode:
         # 但留 fallback 防有人永遠不回（離線 / 路徑全 sym NAT 失敗等）。
         start = time.time()
         deadline = start + window
-        min_wait = 30 * max(ttl, 1)              # 多跳要給深層回來的時間（ttl=2 → 至少等 60s）
         last_n, stable_since = -1, start
         announced_all = False
         while time.time() < deadline:
@@ -404,9 +403,9 @@ class P2PNode:
             responded = self.route_responded.get(qid, set())
             all_responded = bool(expected) and expected.issubset(responded)
             stable = time.time() - stable_since
-            elapsed = time.time() - start
 
-            # 條件 1（首選）：所有直接朋友都回過了 → 再給 30s 等深層 forward 的答案沉澱
+            # 唯一的早收條件：所有直接朋友都回過了 + 穩定 30s
+            # （Carol 是橋的情況下，她要等 Dave 答完才能 relay 回 → 她回了表示深層也收完）
             if all_responded:
                 if not announced_all:
                     print(f"   🧭 [Route] 所有 {len(expected)} 個直接朋友都回了，再等 30s 收尾…")
@@ -414,11 +413,13 @@ class P2PNode:
                 if stable > 30:
                     print(f"   🧭 [Route] 穩定 30s 無新答案 → 收工")
                     break
-            # 條件 2（fallback）：有人沒回但已等夠 min_wait + 有答案 + 穩定 25s → 部分收工
-            elif n > 0 and elapsed > min_wait and stable > 25:
-                missing = expected - responded
-                print(f"   🧭 [Route] fallback：{len(missing)} 個朋友未回，min_wait 過 + 穩定 → 部分收工")
-                break
+            # 不再有「部分收工」fallback —— 寧可等到 window deadline 也不要漏深層答案
+        # 跳出時若仍有人沒回 → 是 window deadline 到了，印警告
+        expected = self.route_expected.get(qid, set())
+        responded = self.route_responded.get(qid, set())
+        if expected and not expected.issubset(responded):
+            missing = expected - responded
+            print(f"   ⏰ [Route] window={window:.0f}s 到，仍有 {len(missing)} 個朋友未回 → 用現有答案收工")
         pool = self.route_pool.get(qid, [])
         # 去重：相同答案只留一筆（多路徑可能回傳同一份）
         _seen, _dedup = set(), []
