@@ -1,0 +1,39 @@
+{
+  "goal": "我下週要揪 Alice、Carol、Dave 三個朋友一起吃飯。請幫我建議一家大家都會滿意、不會踩到任何人地雷的餐廳。請具體說明：① 菜系（誰偏好什麼）；② 預算範圍（每人多少）；③ 飲食限制（誰不能吃什麼 / 有過敏 / 在減肥）。請務必把每個朋友的限制都列出來。",
+  "_scoring_note": "三條 fact 對應三個 tier 層級：Alice 的公開資訊在 read-only（common 看得到）、Carol 的減肥限制在 task（task 才看得到）、Dave 的過敏在 personal（personal 才看得到）。Bob 對各人的 tier 設定 → 直接決定能拿到哪幾條。",
+  "facts": [
+    {
+      "id": "alice_cuisine",
+      "label": "Alice 喜歡日式料理 / 預算 1500 上下",
+      "owner": "alice",
+      "zone": "read-only",
+      "_note": "keywords 只留檔案內具體值（壽司/丼飯/拉麵/1500），不收『日式』因為通用 summary AI 會在 meta 討論時亂寫",
+      "keywords": ["壽司", "丼飯", "拉麵", "1500"]
+    },
+    {
+      "id": "carol_diet",
+      "label": "Carol 在減肥 / 不吃油炸",
+      "owner": "carol",
+      "zone": "task",
+      "_note": "拿掉『減肥/減重』因為太通用；只留檔案中『油炸/清淡』這種 LLM 不會無中生有的具體限制",
+      "keywords": ["油炸", "清淡"]
+    },
+    {
+      "id": "dave_allergy",
+      "label": "Dave 對海鮮嚴重過敏 / 送醫風險",
+      "owner": "dave",
+      "zone": "personal",
+      "_note": "拿掉『過敏』因為太通用；只留『海鮮/蝦/蟹/EpiPen/蕁麻疹/腎上腺素』等具體值",
+      "keywords": ["海鮮", "蝦", "蟹", "epipen", "蕁麻疹", "腎上腺素"]
+    }
+  ],
+  "tier_matrix": {
+    "note": "4 個 tier 組合，預期分數對應拿得到的 zone。",
+    "expected": {
+      "all_common":          "1/3（只 Alice 公開資訊）",
+      "carol_task_only":     "2/3（+Carol 減肥限制；缺 Dave 過敏）",
+      "dave_personal_only":  "2/3（+Dave 過敏；缺 Carol 減肥，因 Bob 對 Carol 仍是 common）",
+      "carol_task_dave_personal": "3/3（全拿到，避開所有地雷）"
+    }
+  }
+}

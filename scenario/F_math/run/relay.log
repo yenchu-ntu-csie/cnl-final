@@ -1,0 +1,24 @@
+🟢 [Relay] Running on 192.168.0.126:9720
+💡 Nodes connect with: --server-ip 192.168.0.126 --server-port 9720
+✅ [Register] 293889fa3c746b6da5e741c37a89d5d5f0a63b735502afd2275883360b112875
+✅ [Register] 28cfbae7786e2ea6142a387adb8451a4868541acefad268a2575dbf236580a43
+✅ [Register] 9f3bfd5de609a45283c373bde5e5c3a26e8890755d8488cfea0fc91a7d9f8a28
+   📦 9f3bfd5de609… → 28cfbae7786e…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 28cfbae7786e… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 9f3bfd5de609… → 28cfbae7786e…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 28cfbae7786e… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 9f3bfd5de609a45283c373bde5e5c3a26e8890755d8488cfea0fc91a7d9f8a28
+✅ [Register] 9f3bfd5de609a45283c373bde5e5c3a26e8890755d8488cfea0fc91a7d9f8a28
+   📦 9f3bfd5de609… → 28cfbae7786e…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 9f3bfd5de609… → 293889fa3c74…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 28cfbae7786e… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 293889fa3c74… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 9f3bfd5de609… → 28cfbae7786e…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 28cfbae7786e… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 9f3bfd5de609… → 293889fa3c74…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 293889fa3c74… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 9f3bfd5de609… → 293889fa3c74…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 293889fa3c74… → 9f3bfd5de609…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 9f3bfd5de609a45283c373bde5e5c3a26e8890755d8488cfea0fc91a7d9f8a28
+🔴 [Offline] 28cfbae7786e2ea6142a387adb8451a4868541acefad268a2575dbf236580a43
+🔴 [Offline] 293889fa3c746b6da5e741c37a89d5d5f0a63b735502afd2275883360b112875
