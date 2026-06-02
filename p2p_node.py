@@ -70,6 +70,7 @@ class P2PNode:
         self.route_pool: Dict[str, list] = {}    # qid → [{"answer","via"}]（我是 origin 時收集答案）
         self.route_expected: Dict[str, Set[str]] = {}   # qid → 直接朋友 pubkey 集合（誰應該回）
         self.route_responded: Dict[str, Set[str]] = {}  # qid → 已經回過 ROUTE_ANSWER 的直接朋友
+        self.outer_pending: Dict[str, "asyncio.Future"] = {}   # outer msg_id → future（給 REJECTED 喚醒）
         self.route_ts: Dict[str, float] = {}     # qid → 首見時間（過期回收用）
         self.route_kw: Dict[str, list] = {}      # qid → 主題關鍵字（智慧路由評分 / 回饋學習用）
         self.server = None
@@ -114,6 +115,16 @@ class P2PNode:
         # 信任白名單：fail-closed —— 不在白名單一律拒收（空白名單 = 拒收所有，與啟動訊息一致）
         if sender not in self.trust:
             print(f"   ⛔ [Reject] 未授權的寄件者 {sender[:16]}…（不在信任白名單）")
+            # 善意 NOTICE：丟個 REJECTED 回去讓對方早早結束等待
+            # （不解密原 payload；只引用 outer msg_id；加密到 sender 的公鑰）
+            if packet.type != "REJECTED" and self.srv_writer:
+                try:
+                    rej = self.build_packet(sender, "REJECTED",
+                        {"rejected_msg_id": packet.msg_id, "reason": "not_in_whitelist"})
+                    await self.send_via_relay(sender, rej)
+                    print(f"   📨 [Reject notice] 已送 REJECTED 給 {sender[:16]}…")
+                except Exception as e:
+                    pass   # 對方可能也不信任我們 → 我們的 REJECTED 也會被擋，沒關係
             return
 
         env = packet.payload
@@ -165,6 +176,14 @@ class P2PNode:
             await self._handle_route_query(sender, app_payload)
         elif packet.type == "ROUTE_ANSWER":
             await self._handle_route_answer(sender, app_payload)
+        elif packet.type == "REJECTED":
+            # 對方善意通知「你不在我的白名單，我把你的 packet 丟了」→ 喚醒對應 future 早早退出
+            rejected_id = app_payload.get("rejected_msg_id", "")
+            reason = app_payload.get("reason", "no reason")
+            print(f"   🚫 [Rejected] {sender[:16]}… 拒收我的 packet ({reason})")
+            fut = self.outer_pending.get(rejected_id) if rejected_id else None
+            if fut and not fut.done():
+                fut.set_exception(RuntimeError(f"對方拒收：{reason}"))
         else:
             print(f"   ⚠️ 未知封包類型: {packet.type}")
 
@@ -935,18 +954,22 @@ async def main(args):
                 # 註冊 future 讓我們可以等回應或超時
                 fut = asyncio.get_event_loop().create_future()
                 node.answers[rid] = fut
+                node.outer_pending[packet.msg_id] = fut   # 也讓 REJECTED 能喚醒它
                 detail = req.get("path") or req.get("query", "")
                 print(f"📤 送出 REQUEST id={rid} op={req['op']} {detail}")
                 await node.send_via_relay(args.peer_pubkey, packet)
-                # 等回應或超時，然後自動退出（沒回應通常代表對方靜默拒收或離線）
+                # 等回應、被拒、或超時，然後自動退出
                 try:
                     await asyncio.wait_for(fut, timeout=args.reply_timeout)
                     print(f"✓ 收到回應，結束。")
                 except asyncio.TimeoutError:
                     print(f"⏱️  {args.reply_timeout}s 內未收到回應 "
-                          f"——對方可能靜默拒收（白名單不含我）或已離線。")
+                          f"——對方可能離線。")
+                except RuntimeError as e:
+                    print(f"❌ {e}（立刻退出，不必再等 timeout）")
                 finally:
                     node.answers.pop(rid, None)
+                    node.outer_pending.pop(packet.msg_id, None)
             relay_task.cancel()
             return
 
@@ -1006,7 +1029,7 @@ if __name__ == "__main__":
     parser.add_argument("--route",       action="store_true",           help="S4 知識路由：對信任圖發 ROUTE_QUERY，多跳找人、沿信任鏈帶回（用 --goal、--ttl）")
     parser.add_argument("--ttl",         type=int, default=2,           help="--route 的最大跳數（預設 2；Bob→Carol→Dave 需要 2）")
     parser.add_argument("--window",      type=float, default=200.0,     help="--route 收集答案的最長秒數（慢模型 × 深跳要調大；預設 200）")
-    parser.add_argument("--reply-timeout", type=float, default=10.0,     help="單發 --op ask/read/append/list 等回應的最長秒數（沒回 → 自動退出，預期被靜默拒收或對方離線）；預設 10s")
+    parser.add_argument("--reply-timeout", type=float, default=200.0,     help="單發 --op ask/read/append/list 等回應的最長秒數（沒回 → 自動退出，預期被靜默拒收或對方離線）；預設 10s")
     parser.add_argument("--share",       type=str, default="share",     help="本機分享資料夾（預設 share/）")
     parser.add_argument("--model",       type=str, default=None,        help="ask 用的 Ollama 模型；不指定時走 LINKEDOUT_MODEL / OLLAMA_MODEL 環境變數，再不然挑本機第一個已安裝的")
 
