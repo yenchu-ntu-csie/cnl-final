@@ -22,6 +22,13 @@ from typing import Dict, Iterable, List, Optional
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 REQUEST_TIMEOUT = 180            # 秒（含模型載入）
 
+# 強制繁體中文輸出（Qwen 預設輸出簡體，這條規則會自動串接到每個 system prompt）
+_TRAD_CN_RULE = (
+    "重要：以中文回答時，**一律使用繁體中文（Traditional Chinese）**，"
+    "嚴禁使用簡體中文。範例：寫「實驗」不寫「实验」、寫「網路」不寫「网络」、"
+    "寫「資料」不寫「数据」、寫「設定」不寫「设定」。"
+)
+
 # 模型選擇優先順序：
 #   1) 呼叫端顯式傳入 (model="...")
 #   2) 環境變數 LINKEDOUT_MODEL（隊員各自設定）
@@ -93,6 +100,11 @@ def _call_sync(model: Optional[str], messages: list, fmt: Optional[str] = None) 
     """同步呼叫 Ollama /api/chat。回傳 model 的純文字輸出；失敗則 raise。
     fmt="json" 會走 Ollama 的 JSON 模式（強制輸出合法 JSON），給 next_step 用。"""
     chosen = resolve_model(model)
+    # 自動把繁體中文規則注入到 system message（避免每個 prompt 都要手動加）
+    if messages and messages[0].get("role") == "system":
+        sys_msg = dict(messages[0])
+        sys_msg["content"] = sys_msg["content"].rstrip() + "\n\n" + _TRAD_CN_RULE
+        messages = [sys_msg] + messages[1:]
     payload = {
         "model": chosen,
         "messages": messages,
