@@ -68,6 +68,8 @@ class P2PNode:
         self.route_back: Dict[str, str] = {}     # qid → 上游 pubkey（中間人把答案往這裡帶回）
         self.route_seen: Set[str] = set()        # qid 去重（防迴圈 / 重複轉發）
         self.route_pool: Dict[str, list] = {}    # qid → [{"answer","via"}]（我是 origin 時收集答案）
+        self.route_expected: Dict[str, Set[str]] = {}   # qid → 直接朋友 pubkey 集合（誰應該回）
+        self.route_responded: Dict[str, Set[str]] = {}  # qid → 已經回過 ROUTE_ANSWER 的直接朋友
         self.route_ts: Dict[str, float] = {}     # qid → 首見時間（過期回收用）
         self.route_kw: Dict[str, list] = {}      # qid → 主題關鍵字（智慧路由評分 / 回饋學習用）
         self.server = None
@@ -237,6 +239,7 @@ class P2PNode:
         for q in [q for q, t in self.route_ts.items() if t < cutoff]:
             self.route_ts.pop(q, None); self.route_seen.discard(q)
             self.route_back.pop(q, None); self.route_pool.pop(q, None)
+            self.route_expected.pop(q, None); self.route_responded.pop(q, None)
 
     @staticmethod
     def _valid_route_query(p: Dict):
@@ -338,6 +341,8 @@ class P2PNode:
 
         if qid in self.route_pool:               # 我是 origin
             self.route_pool[qid].append({"answer": ans, "who": who, "tier": tier, "via": via})
+            # 記下「這個直接朋友回過了」（sender 是 ROUTE_ANSWER 的直接 source）
+            self.route_responded.setdefault(qid, set()).add(sender)
             path = " → ".join([self.owner] + via + [who])
             print(f"   🧭 [Route] origin 收到答案 ← {who}（tier={tier}）path: {path}")
         elif qid in self.route_back:             # 我是中間人 → 往上游 relay（把自己名字補進 via）
@@ -359,22 +364,42 @@ class P2PNode:
         # origin 也用智慧路由：學到聲望後只往對的直接朋友發（冷啟動才全發）
         targets, mode = self._pick_next_hops(cands, self.route_kw[qid])
         print(f"🧭 [Route] origin 發 qid={qid} ttl={ttl} 給 {len(targets)}/{len(cands)} 個直接朋友（{mode}）")
+        self.route_expected[qid] = set(targets)
+        self.route_responded[qid] = set()
         for pk in targets:
             await self._send_route_query(pk, qid, goal, ttl, [me])
 
-        # 收集窗：答案分時序回來，越深的跳越慢（每跳要再跑一次 LLM）。
-        # 所以早收前要先等夠「ttl 跳的來回時間」，否則會在最深的答案回來前就切掉。
+        # 收集窗：理想是「所有直接朋友都回 + 穩定一段時間 → 收」，
+        # 但留 fallback 防有人永遠不回（離線 / 路徑全 sym NAT 失敗等）。
         start = time.time()
         deadline = start + window
         min_wait = 30 * max(ttl, 1)              # 多跳要給深層回來的時間（ttl=2 → 至少等 60s）
         last_n, stable_since = -1, start
+        announced_all = False
         while time.time() < deadline:
             await asyncio.sleep(3)
             n = len(self.route_pool.get(qid, []))
             if n != last_n:
                 last_n, stable_since = n, time.time()
-            elif n > 0 and (time.time() - start) > min_wait and (time.time() - stable_since) > 25:
-                break                            # 等夠 min_wait 且穩定 25s 才早收
+            expected = self.route_expected.get(qid, set())
+            responded = self.route_responded.get(qid, set())
+            all_responded = bool(expected) and expected.issubset(responded)
+            stable = time.time() - stable_since
+            elapsed = time.time() - start
+
+            # 條件 1（首選）：所有直接朋友都回過了 → 再給 30s 等深層 forward 的答案沉澱
+            if all_responded:
+                if not announced_all:
+                    print(f"   🧭 [Route] 所有 {len(expected)} 個直接朋友都回了，再等 30s 收尾…")
+                    announced_all = True
+                if stable > 30:
+                    print(f"   🧭 [Route] 穩定 30s 無新答案 → 收工")
+                    break
+            # 條件 2（fallback）：有人沒回但已等夠 min_wait + 有答案 + 穩定 25s → 部分收工
+            elif n > 0 and elapsed > min_wait and stable > 25:
+                missing = expected - responded
+                print(f"   🧭 [Route] fallback：{len(missing)} 個朋友未回，min_wait 過 + 穩定 → 部分收工")
+                break
         pool = self.route_pool.get(qid, [])
         # 去重：相同答案只留一筆（多路徑可能回傳同一份）
         _seen, _dedup = set(), []
