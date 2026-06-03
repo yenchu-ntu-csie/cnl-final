@@ -1,0 +1,76 @@
+{
+  "F1_baseline": {
+    "error": "timed out",
+    "expect_facts": 1,
+    "expect_answer": "none",
+    "label": "Bob 自己（只有 sum）"
+  },
+  "F2_partial": {
+    "expect_facts": 2,
+    "expect_answer": "both",
+    "label": "Bob + Alice（sum + product）",
+    "facts": {
+      "score": 0,
+      "total": 3,
+      "hits": [
+        {
+          "id": "sum_10",
+          "hit": false,
+          "via": null,
+          "owner": "bob"
+        },
+        {
+          "id": "product_24",
+          "hit": false,
+          "via": null,
+          "owner": "alice"
+        },
+        {
+          "id": "x_gt_y",
+          "hit": false,
+          "via": null,
+          "owner": "carol"
+        }
+      ]
+    },
+    "answer": {
+      "verdict": "none",
+      "has_correct": false,
+      "has_wrong": false
+    }
+  },
+  "F3_full": {
+    "expect_facts": 3,
+    "expect_answer": "correct",
+    "label": "Bob + Alice + Carol（全 3 條）",
+    "facts": {
+      "score": 3,
+      "total": 3,
+      "hits": [
+        {
+          "id": "sum_10",
+          "hit": true,
+          "via": "x + y = 10",
+          "owner": "bob"
+        },
+        {
+          "id": "product_24",
+          "hit": true,
+          "via": "x × y = 24",
+          "owner": "alice"
+        },
+        {
+          "id": "x_gt_y",
+          "hit": true,
+          "via": "x > y",
+          "owner": "carol"
+        }
+      ]
+    },
+    "answer": {
+      "verdict": "none",
+      "has_correct": false,
+      "has_wrong": false
+    }
+  }
+}

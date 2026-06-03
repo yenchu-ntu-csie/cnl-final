@@ -6,8 +6,10 @@
 # 啟動時不用指定對應誰。
 #
 # 用法：
-#   ./run_A.sh                 # 直接啟動，接受白名單裡所有人
-#   ./run_A.sh <某人的公鑰>     # 先把這把公鑰加進白名單（持久化），再啟動
+#   ./run_A.sh                                  # 直接啟動，接受白名單裡所有人
+#   ./run_A.sh <某人的公鑰>                       # 加進白名單（預設 tier=common）再啟動
+#   ./run_A.sh <某人的公鑰> <名字>                # 同上，順便給名字
+#   ./run_A.sh <某人的公鑰> <名字> <tier>         # 指定 tier：common / task / personal
 #
 # Relay IP 可用環境變數覆蓋：RELAY_IP=1.2.3.4 ./run_A.sh
 # ============================================================
@@ -28,17 +30,32 @@ echo "   $MY_PUB"
 echo "============================================================"
 
 # 若有帶參數，先把對方公鑰加進白名單（之後就記住了，不用每次帶）
+# ${3:+--tier "$3"} 在沒第三個參數時整段消失，有的話就帶 --tier <tier>
 if [ -n "${1:-}" ]; then
-  python3 agents.py add "$1" --name "${2:-peer}"
+  python3 agents.py add "$1" --name "${2:-peer}" ${3:+--tier "$3"}
 fi
 
-# 準備分享資料夾：share/read-only（對方只能讀）、share/read&append（對方可讀可追加）
-mkdir -p "share/read-only" "share/read&append"
-[ -f "share/read-only/notes.md" ] || printf 'LinkedOut 共享筆記（read-only）\n第一行\n' > "share/read-only/notes.md"
+# 準備四個 zone（p2p_node 啟動也會 ensure_share；這裡多做是為了放範例檔）
+mkdir -p "share/read-only" "share/read&append" "share/task" "share/personal"
+[ -f "share/read-only/notes.md" ] || \
+  printf 'LinkedOut 共享筆記（read-only）\n第一行\n' > "share/read-only/notes.md"
+
+# ===== Ollama daemon 檢查（ask op 才用得到，提示用、不擋執行）=====
+if curl -s --max-time 1 http://localhost:11434/api/tags >/dev/null 2>&1; then
+  MODELS=$(curl -s --max-time 1 http://localhost:11434/api/tags | python3 -c "
+import json,sys
+try: print(','.join(m['name'] for m in json.load(sys.stdin).get('models',[])) or '(無模型)')
+except: print('(讀不到)')
+")
+  echo "🤖 Ollama daemon OK，可用模型：${MODELS}"
+else
+  echo "⚠️  Ollama daemon 沒在跑 → 對方下 ask 會回 ai_error"
+  echo "   啟動：cd ../ollama && OLLAMA_MODELS=\"\$PWD/models\" ./ollama serve"
+fi
 
 # 顯示目前白名單
 python3 agents.py list
-echo "📁 分享資料夾 share/：read-only/（唯讀）、read&append/（可追加）"
+echo "📁 share/ 四區：read-only、read&append（common）、task（task）、personal（personal）"
 echo "🌐 Relay: ${RELAY_IP}:${RELAY_PORT}　等待白名單成員的加密訊息…"
 echo
 

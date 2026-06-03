@@ -1,0 +1,32 @@
+{
+  "goal": "我想把實驗室那台舊 GPU 機器改造成一個本地 LLM 服務，並且讓我在家也能安全連進去用。請給我這個情境下最關鍵、必須注意的設定與做法（量化、遠端連線、驅動）。",
+  "_scoring_note": "關鍵字刻意選『通用 LLM 猜不到的私有特定值』(實測上限/tailnet 名/埠號/版本號)，這樣 baseline 只能拿 0，協作才補得上。每條 fact 任一 keyword 命中即算。",
+  "facts": [
+    {
+      "id": "quantization",
+      "label": "這台實測：Q4_K_M + context 上限 3500（4096 會 OOM）",
+      "owner": "alice",
+      "keywords": ["3500", "q4_k_m", "q4_km"]
+    },
+    {
+      "id": "remote_access",
+      "label": "Tailscale tailnet=lab-7f3a，防火牆只放行 UDP 41641",
+      "owner": "carol",
+      "keywords": ["lab-7f3a", "7f3a", "41641"]
+    },
+    {
+      "id": "driver",
+      "label": "K40：鎖 CUDA 11.4 + BIOS 關 Above 4G Decoding",
+      "owner": "dave",
+      "keywords": ["11.4", "above 4g", "above 4g decoding"]
+    }
+  ],
+  "reachability": {
+    "note": "Bob 有 Alice、Carol 的金鑰；Carol 有 Dave 的金鑰；Bob 沒有 Dave 的金鑰。",
+    "expected": {
+      "baseline": "~0/3（私有特定值通用 LLM 猜不到）",
+      "v1_direct_peers": "2/3（拿到 Alice 3500/Q4_K_M + Carol lab-7f3a/41641；搆不到 Dave 的 11.4/Above4G）",
+      "multihop_S4": "3/3（Carol 代為轉發到 Dave，補上驅動）"
+    }
+  }
+}

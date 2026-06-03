@@ -1,0 +1,82 @@
+🟢 [Relay] Running on 10.5.5.105:9710
+💡 Nodes connect with: --server-ip 10.5.5.105 --server-port 9710
+✅ [Register] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+✅ [Register] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+✅ [Register] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+✅ [Register] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+🔴 [Offline] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+🔴 [Offline] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+🔴 [Offline] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+✅ [Register] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+✅ [Register] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+✅ [Register] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+✅ [Register] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+🔴 [Offline] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+🔴 [Offline] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+🔴 [Offline] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+✅ [Register] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+✅ [Register] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+✅ [Register] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+✅ [Register] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+🔴 [Offline] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+🔴 [Offline] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+🔴 [Offline] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+✅ [Register] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+✅ [Register] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+✅ [Register] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+✅ [Register] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 12d3a0caf2a6…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 12d3a0caf2a6… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 6354de1be197…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 6354de1be197… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 07f751786f32… → 67ac300723de…  | 🔒 payload encrypted (relay 看不懂內容)
+   📦 67ac300723de… → 07f751786f32…  | 🔒 payload encrypted (relay 看不懂內容)
+🔴 [Offline] 07f751786f32817bb3bb7d453cd00cc9c75700ffb82d845c7213c74dd04c1740
+🔴 [Offline] 67ac300723dee305e160567fd0410cf4a46f46abaabfe243b3a839f15edcbc13
+🔴 [Offline] 6354de1be197048141f3d1cdc36a0e011cbcf4ea5c60a1f2e4094b7d159e622b
+🔴 [Offline] 12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656

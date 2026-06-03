@@ -1,0 +1,106 @@
+{
+  "A_all_common": {
+    "score": 0,
+    "total": 3,
+    "expect": 1,
+    "label": "全 common（Bob 跟誰都不熟）",
+    "hits": [
+      {
+        "id": "alice_cuisine",
+        "hit": false,
+        "via": null,
+        "owner": "alice"
+      },
+      {
+        "id": "carol_diet",
+        "hit": false,
+        "via": null,
+        "owner": "carol"
+      },
+      {
+        "id": "dave_allergy",
+        "hit": false,
+        "via": null,
+        "owner": "dave"
+      }
+    ]
+  },
+  "B_carol_task": {
+    "score": 2,
+    "total": 3,
+    "expect": 2,
+    "label": "Carol→task（Bob 跟 Carol 是同事）",
+    "hits": [
+      {
+        "id": "alice_cuisine",
+        "hit": true,
+        "via": "1500",
+        "owner": "alice"
+      },
+      {
+        "id": "carol_diet",
+        "hit": true,
+        "via": "油炸",
+        "owner": "carol"
+      },
+      {
+        "id": "dave_allergy",
+        "hit": false,
+        "via": null,
+        "owner": "dave"
+      }
+    ]
+  },
+  "C_dave_personal": {
+    "score": 2,
+    "total": 3,
+    "expect": 2,
+    "label": "Dave→personal（Bob 跟 Dave 是密友）",
+    "hits": [
+      {
+        "id": "alice_cuisine",
+        "hit": true,
+        "via": "1500",
+        "owner": "alice"
+      },
+      {
+        "id": "carol_diet",
+        "hit": false,
+        "via": null,
+        "owner": "carol"
+      },
+      {
+        "id": "dave_allergy",
+        "hit": true,
+        "via": "海鮮",
+        "owner": "dave"
+      }
+    ]
+  },
+  "D_carol_task_dave_personal": {
+    "score": 2,
+    "total": 3,
+    "expect": 3,
+    "label": "Carol→task + Dave→personal（雙線解鎖）",
+    "hits": [
+      {
+        "id": "alice_cuisine",
+        "hit": true,
+        "via": "1500",
+        "owner": "alice"
+      },
+      {
+        "id": "carol_diet",
+        "hit": true,
+        "via": "油炸",
+        "owner": "carol"
+      },
+      {
+        "id": "dave_allergy",
+        "hit": false,
+        "via": null,
+        "owner": "dave"
+      }
+    ]
+  }
+}

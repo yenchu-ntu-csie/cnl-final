@@ -5,14 +5,22 @@ LinkedOut E2EE — 端對端加密層
   - 每個節點持有一把長期 X25519 靜態金鑰，其 public key (hex) 就是節點身分。
   - 每則訊息採 Noise「X」單向模式：寄件者額外產生一把「臨時 (ephemeral)」金鑰，
     與收件者做兩次 Diffie-Hellman：
-        es = DH(ephemeral_priv, recipient_static_pub)   → 提供 forward secrecy
-        ss = DH(sender_static_priv, recipient_static_pub) → 提供寄件者身分驗證
+        es = DH(ephemeral_priv, recipient_static_pub)     → 每則訊息獨立的臨時性
+        ss = DH(sender_static_priv, recipient_static_pub) → 寄件者身分驗證
     兩段共享秘密經 HKDF-SHA256 導出對稱金鑰，再以 ChaCha20-Poly1305 (AEAD) 加密。
   - 封包的路由 metadata (sender/target/msg_id/type) 綁進 AEAD 的 AAD，
     relay server 若竄改 metadata 會導致解密失敗。
 
-結果：relay server 只看得到密文與路由位址，無法解讀內容；
-收件者能確認訊息確實來自宣稱的寄件者 (mutual auth)。
+提供的保證：
+  - 機密性 + 完整性（AEAD）；relay 只看得到密文與路由位址。
+  - 寄件者身分驗證：收件者能確認訊息確實來自宣稱的寄件者。
+  - 每則訊息用一把臨時金鑰 → 對「寄件者長期金鑰外洩」有 forward secrecy。
+
+⚠️ 不提供的保證（誠實說明，別寫過頭）：
+  - 兩段 DH 都用到「收件者的長期靜態金鑰」。若該金鑰日後外洩，
+    由於 eph_pub 是公開的，es=DH(eph_pub, recipient_static) 可被重算 → 過去錄下的密文可被解。
+  - 即：對「收件者長期金鑰外洩」沒有 forward secrecy（Noise「X」單向模式的固有限制；
+    真正的雙向 FS 需收件者也貢獻一把臨時金鑰，屬互動式握手，本實作未做）。
 """
 
 import os
@@ -77,7 +85,7 @@ def encrypt(sender_priv: X25519PrivateKey, recipient_pub_hex: str,
     eph_pub_raw = _raw_pub(eph)
     sender_pub_raw = _raw_pub(sender_priv)
 
-    es = eph.exchange(recipient_pub)            # forward secrecy
+    es = eph.exchange(recipient_pub)            # 臨時性：對「寄件者金鑰外洩」有 FS（注意：兩段都用收件者靜態鑰，對收件者金鑰外洩無 FS）
     ss = sender_priv.exchange(recipient_pub)    # sender authentication
     key = _derive_key(es + ss, eph_pub_raw, sender_pub_raw, recipient_pub_raw)
 

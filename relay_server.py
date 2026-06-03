@@ -2,7 +2,10 @@ import asyncio
 import json
 import socket
 import argparse
-from typing import Dict
+from typing import Dict, List
+
+# 離線存轉：每個 pubkey 最多暫存幾則（防無限增長；超過丟最舊的）
+MAX_QUEUE_PER_PEER = 50
 
 def get_lan_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -21,6 +24,7 @@ class RelayServer:
     def __init__(self, port: int = 9000):
         self.port = port
         self.peers: Dict[str, asyncio.StreamWriter] = {}  # pubkey → writer
+        self.queues: Dict[str, List[dict]] = {}           # 離線存轉：pubkey → 待投遞封包
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         pubkey = None
@@ -47,6 +51,15 @@ class RelayServer:
                     writer.write(info.encode())
                     await writer.drain()
 
+                    # 離線存轉：上線就把暫存的封包補投
+                    queued = self.queues.pop(pubkey, [])
+                    if queued:
+                        print(f"   📨 [Flush] {str(pubkey)[:12]}… 上線，補投 {len(queued)} 則暫存封包")
+                        for pkt in queued:
+                            deliver = json.dumps({"type": "DELIVER", "packet": pkt}) + "\n"
+                            writer.write(deliver.encode())
+                        await writer.drain()
+
                 # 轉發封包給目標
                 elif msg["type"] == "FORWARD":
                     to = msg.get("to_pubkey")
@@ -61,10 +74,15 @@ class RelayServer:
                         seal = "🔒 payload encrypted (relay 看不懂內容)" if enc else "⚠️ plaintext payload"
                         print(f"   📦 {str(pubkey)[:12]}… → {str(to)[:12]}…  | {seal}")
                     else:
-                        err = json.dumps({"type": "ERROR", "reason": "peer_offline"}) + "\n"
-                        writer.write(err.encode())
+                        # 離線存轉：對方不在線 → 暫存，等他上線再補投（取代直接丟棄）
+                        q = self.queues.setdefault(to, [])
+                        q.append(msg["packet"])
+                        if len(q) > MAX_QUEUE_PER_PEER:
+                            q.pop(0)                       # 超量丟最舊的（bounded）
+                        notice = json.dumps({"type": "QUEUED", "to_pubkey": to, "depth": len(q)}) + "\n"
+                        writer.write(notice.encode())
                         await writer.drain()
-                        print(f"   ⚠️  {to} offline")
+                        print(f"   📦→📥 {str(to)[:12]}… offline，暫存（佇列 {len(q)}）")
 
         except (asyncio.IncompleteReadError, ConnectionResetError, json.JSONDecodeError):
             pass

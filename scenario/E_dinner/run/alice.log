@@ -1,0 +1,22 @@
+============================================================
+🦉 [LinkedOut] Node 'Alice'
+🔑 My public key（分享給朋友，加入對方 agent list）:
+   12d3a0caf2a6ff87847d411123846415b498b2d977baeca8d7f04b3b24ec4656
+🤝 信任白名單（1 人，來自 /Users/fl/Documents/大三/CNL/cnl-final/scenario/E_dinner/run/alice/agents.json）: ['Bob(07f75178…)']
+============================================================
+🌐 [Mode] Relay 模式（Server: 127.0.0.1:9710）
+🔗 [Relay] Connecting to 127.0.0.1:9710 ...
+✅ [Relay] Registered as 12d3a0caf2a6ff87…
+   👥 Online: ['6354de1be1970481…', '12d3a0caf2a6ff87…']
+📥 [Relay] From: 07f751786f32817b… | Type: REQUEST
+   🔓 [Decrypted] from 07f751786f32817b… ✔ 寄件者已驗證
+   📂 [Request] id=d8ed726b op=capability tier=common topic=我下週要揪 Alice、Carol、Dave 三個朋友一起吃飯。請幫我建議一家大
+   🔍 [Capability] topic='我下週要揪 Alice、Carol、Dave 三個朋友一起吃飯。請幫我建議一家大家都會滿意、不會踩到任何人地雷的餐廳。請' tier=common ctx_chunks=1
+   ↩️  [Response] id=d8ed726b ok=True (capability: relevant=True, topics=['日式料理', '預算', '飲食限制'])
+📤 [Relay] Sent to 07f751786f32817b…（🔒 已加密，relay 無法解讀）
+📥 [Relay] From: 07f751786f32817b… | Type: REQUEST
+   🔓 [Decrypted] from 07f751786f32817b… ✔ 寄件者已驗證
+   📂 [Request] id=f1ec0619 op=ask tier=common [remote] 您能夠提供每個朋友的飲食限制資訊嗎？…
+   🧠 [Ask/remote] '您能夠提供每個朋友的飲食限制資訊嗎？'… tier=common ctx_chunks=1 model=auto
+   ↩️  [Response] id=f1ec0619 ok=True (AI 回應)
+📤 [Relay] Sent to 07f751786f32817b…（🔒 已加密，relay 無法解讀）
