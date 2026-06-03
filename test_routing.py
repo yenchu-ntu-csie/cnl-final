@@ -69,7 +69,37 @@ def test_cold_then_targeted():
     print("✅ 不同主題 → 仍冷啟動（聲望是 per-topic，不會亂套用）")
 
 
+def test_reward_penalty_decay():
+    """信任度評分：有獎(帶回答案)有罰(轉了沒貢獻)，分數下限 0 → 爛/失效轉介會退場。"""
+    A, B = "a" * 64, "b" * 64
+    af = os.path.join(tempfile.mkdtemp(), "agents.json")
+    agents.add(A, "A", af); agents.add(B, "B", af)
+    node = _mknode([A, B], agents.load(af), af)
+    kws = ["cuda"]
+
+    # 一次路由：發給 A、B；只有 A 帶回答案
+    node.route_kw["q"] = kws
+    node.route_expected["q"] = {A, B}
+    node.route_responded["q"] = set()
+    node._credit(A, kws)                       # A 回了 → 即時獎勵
+    node.route_responded["q"].add(A)
+    node._route_feedback("q")                  # 窗結束 → B(沒回)受罰
+    assert node.agent_meta[A]["rep"]["cuda"] == 1.0, node.agent_meta[A]
+    assert "cuda" not in node.agent_meta[B].get("rep", {}), "B 0 分應退場"  # 0 → 移除
+    assert agents.load(af)[A]["rep"].get("cuda") == 1.0                     # 持久化
+    print("✅ 信任度評分：A 獎勵(+1)、B 懲罰歸 0 退場（有獎有罰）")
+
+    # A 連兩次沒貢獻 → 罰回 0（退場、回冷啟動）
+    node.route_responded["q"] = set()          # 這次 A 也沒回
+    node._route_feedback("q"); node._route_feedback("q")
+    assert "cuda" not in node.agent_meta[A].get("rep", {}), "A 連續沒貢獻應退場"
+    chosen, mode = node._pick_next_hops([A, B], kws)
+    assert mode == "cold-flood", "全退場 → 回冷啟動"
+    print("✅ 失效轉介連續受罰 → 退場、回冷啟動（不會永久卡高分）")
+
+
 if __name__ == "__main__":
     test_keyword_and_score()
     test_cold_then_targeted()
+    test_reward_penalty_decay()
     print("\n🎉 smart-routing 邏輯測試通過")

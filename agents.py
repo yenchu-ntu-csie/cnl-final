@@ -101,7 +101,9 @@ def rep_score(meta: dict, kws) -> float:
 
 
 def bump_rep(pubkey: str, kws, path: str = DEFAULT_PATH, amount: float = 1.0) -> None:
-    """回饋學習：某 next-hop 把某主題的答案帶回來了 → 替它在這些關鍵字加分（持久化）。"""
+    """回饋學習：替某 next-hop 在這些關鍵字「加/減」分（持久化）。
+    amount>0 = 獎勵（帶回答案）；amount<0 = 懲罰（轉了卻沒貢獻）。
+    分數下限 0：降到 0 的關鍵字會被移除 → 該主題回到冷啟動（會退場、不會永久卡高分）。"""
     if not kws:
         return
     a = load(path)
@@ -109,7 +111,13 @@ def bump_rep(pubkey: str, kws, path: str = DEFAULT_PATH, amount: float = 1.0) ->
         return
     rep = a[pubkey].setdefault("rep", {})
     for kw in kws:
-        rep[kw] = float(rep.get(kw, 0)) + amount
+        v = float(rep.get(kw, 0)) + amount
+        if v > 0:
+            rep[kw] = v
+        else:
+            rep.pop(kw, None)          # 降到 0 → 移除（回到冷啟動）
+    if not rep:
+        a[pubkey].pop("rep", None)     # rep 空了就清掉，保持檔案乾淨
     save(a, path)
 
 

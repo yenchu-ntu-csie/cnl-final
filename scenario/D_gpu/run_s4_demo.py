@@ -26,7 +26,7 @@ def run_route(goal, pub, ttl=2):
            "--agents-file", os.path.join(rs.RUN, "bob", "agents.json"),
            "--share", os.path.join(rs.RUN, "bob", "share"),
            "--server-ip", "127.0.0.1", "--server-port", str(rs.RELAY_PORT),
-           "--route", "--goal", goal, "--ttl", str(ttl)]
+           "--route", "--goal", goal, "--ttl", str(ttl), "--window", "600"]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
     out = res.stdout + res.stderr
     marker = "最終整理"
@@ -75,7 +75,7 @@ def main():
         print("════════ S4（--route 多跳：Carol 代轉到 Dave）════════")
         s4_sum, s4_log = run_route(goal, pub, ttl=2)
         for line in s4_log.splitlines():
-            if "[Route]" in line and ("轉發" in line or "有料" in line or "收到答案" in line or "收集到" in line):
+            if "[Route]" in line and ("轉給" in line or "有料" in line or "收到答案" in line or "收集到" in line or "中介整理" in line):
                 print("  ", line.strip())
         print("   ── S4 最終答案 ──")
         for line in s4_sum.splitlines()[:12]:
