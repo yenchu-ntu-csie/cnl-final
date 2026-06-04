@@ -11,8 +11,8 @@
  應用層 (app_layer)   ask(remote/local) · read/append/list · capability · tier ACL(common<task<personal)
  自主/路由層 (p2p_node) autonomous 群組(--auto, 平行 capability scan)
                        S4 知識路由(--route): ROUTE_QUERY/ROUTE_ANSWER 多跳 + 聲望 targeted
-                       中介 agent: 每個轉發節點收下游答案 → 用自己 LLM 以「對上游 tier」整理一份再回
-                       (像真人轉述；回程也把關 tier；深層來源匿名成「轉述 N 位聯絡人」)
+                       中介 agent: 每個轉發節點收下游答案 → 以「對上游 tier」metadata 硬擋過濾 + 忠實彙整再回
+                       (回程也把關 tier；深層來源匿名成「轉述 N 位聯絡人」；最終 synthesis 由 origin 做一次)
  加密層 (e2ee)        X25519 + ChaCha20-Poly1305(AEAD)，每訊息臨時金鑰，metadata 綁 AAD
  中繼 (relay_server)  依公鑰轉發、看不到明文；離線存轉(queue + 上線補投)
  信任 (agents)        白名單(fail-closed) + per-peer tier + per-topic reputation(有獎有罰、會退場)
@@ -25,14 +25,15 @@
  (問)    └─ Carol (網路) ── Dave (硬體)        Bob → Carol → Dave
               ↑ 每一跳都在「互信、互有金鑰」的一對之間；每跳用上游的 tier 把關
    答案沿信任鏈反向回傳：Dave → Carol → Bob（origin 拒收陌生人，故不直送）
-   回程不是盲轉：Carol 是「中介 agent」，把 Dave 的答案 + 自己的料用自己 LLM 整理一份再回 Bob。
+   回程不是盲轉：Carol 是「中介 agent」，把 Dave 的答案 + 自己的料以 tier 過濾後忠實彙整再回 Bob。
 ```
 - **要不要問 / 問誰 / 答不答**＝同一個本地判斷「給這題 + 我的 vault，我有沒有能貢獻的」。
 - **next hop 為何需要**：金鑰圖稀疏 → 圈外的人定址不到，只能經共同朋友轉（≈ IP 經 gateway）。
-- **中介 agent（非無腦轉發）**：每個轉發節點像真人——收到下游回覆會用自己的 AI **整理/轉述**再上送，
-  且以「自己對上游的 tier」決定能轉多少 → ① 回程也把關 tier（深層專家依「他信任中介」吐的內容
-  不會越權流回低 tier 的 origin）；② 深層來源對上游**匿名**（Bob 只看到「Carol 轉述 N 位聯絡人」，看不到 Dave）；
-  ③ 單筆且 tier 安全時輕量轉述、不浪費 LLM。
+- **中介 agent（非無腦轉發）**：每個轉發節點收到下游回覆會以「自己對上游的 tier」**過濾並彙整**再上送：
+  ① 回程也把關 tier——用 **metadata 硬擋**（丟掉 tier 高於上游的內容），比 LLM 軟過濾可靠，
+  深層專家依「他信任中介」吐的內容**不會越權流回低 tier 的 origin**；② 深層來源對上游**匿名**
+  （Bob 只看到「Carol 轉述 N 位聯絡人」，看不到 Dave）；③ 中介層**不再呼叫 LLM**（忠實保留具體值、
+  不逐跳改寫流失事實、在慢模型上也不會多一次 timeout）→ 唯一的最終 synthesis 由 origin 做一次。
 
 ## 四、主要結果（實跑；數字見 testbed 輸出）
 1. **協作 vs 單打（scenario D，per-fact 命中率）**：baseline（自己/通用 LLM）對私有特定值（3500 / lab-7f3a / 41641 / CUDA 11.4）≈ **0**；問直接朋友拿到 2 條；**只有多跳(S4) 能補上第 3 條（Dave 的 CUDA 11.4）** → 證明多跳帶來的價值非隨機。
@@ -49,7 +50,7 @@
    我們**只對信任名單內的朋友打分**，陌生人的知識經「打過分的朋友」流進來 → 評分有真實錨點、抗 Sybil；
    且像 distance-vector 的 metric——獎勵讓路由收斂、懲罰讓失效/過期的轉介退場。
 5. **安全性（test_security 6 項全過）**：空白名單 fail-closed 拒收、未授權拒收、common 經 S4 也拿不到 personal
-   （tier ACL 不被路由繞過）；**回程經中介 agent 以對上游 tier 重述 → 越權內容不會沿回程外洩**。
+   （tier ACL 不被路由繞過）；**回程經中介 agent 以對上游 tier 做 metadata 硬擋 → 越權內容不會沿回程外洩**。
 6. **韌性（test_storeforward）**：peer 離線 → relay 暫存、上線補投，訊息不丟。
 
 ## 五、誠實的限制（report 要寫，顯示我們知道邊界）

@@ -485,10 +485,12 @@ class P2PNode:
             return 0
 
     async def _mediate(self, qid: str, query: str, upstream: str, up_tier: str, window: float):
-        """中介 agent：收完下游答案 → 整理成一份 → 往上游回。像真人轉述：上游聽到的是
-        「我（中介）整理/轉述的話」，深層來源被封裝成匿名的「轉述 N 位聯絡人」、不直接外露。
-        最佳化：單筆且其 tier 不高於 up_tier（轉述安全）→ 輕量轉述、省一次 LLM；
-        多筆、或單筆但 tier 高於 up_tier（需降權過濾）→ 才用 LLM 整理。"""
+        """中介 agent：收完下游答案 → 忠實彙整一份 → 往上游回。
+        - tier 把關用 **metadata 硬擋**（丟掉 tier 高於 up_tier 的內容）→ 比 LLM 軟過濾更可靠，
+          深層專家依「他信任中介」吐的越權內容不會流回低 tier origin。
+        - 深層來源對上游**匿名**（封裝成「轉述 N 位聯絡人」）。
+        - **不在中介層再呼叫 LLM**：保留每條具體值不改寫（避免逐跳改寫流失事實 / 在慢模型上 timeout），
+          唯一的最終 synthesis 由 origin 做一次。"""
         try:
             await self._collect_pool(qid, window, stable_secs=8.0)
             self._route_feedback(qid)               # 有獎有罰：沒貢獻的下游 next-hop 扣分
@@ -498,22 +500,20 @@ class P2PNode:
                 k = (it.get("answer") or "").strip()
                 if k and k not in _seen:
                     _seen.add(k); pool.append(it)
-            if not pool:
-                return                              # 下游全無答案 → 不回（origin 端用 deadline 收尾）
-            deep = sum(1 for it in pool if it.get("who") != self.owner)   # 深層來源數（匿名）
+            # tier 硬擋：只保留「不高於我對上游 tier」的內容（metadata，不靠 LLM）
+            up_rank = self._tier_rank(up_tier)
+            kept = [it for it in pool if self._tier_rank(it.get("tier")) <= up_rank]
+            if not kept:
+                return                              # 全被擋下 / 無答案 → 不回
+            deep = sum(1 for it in kept if it.get("who") != self.owner)   # 深層來源數（匿名）
             who = self.owner if deep == 0 else f"{self.owner}（轉述 {deep} 位聯絡人）"
-
-            if len(pool) == 1 and self._tier_rank(pool[0].get("tier")) <= self._tier_rank(up_tier):
-                # 單筆且轉述安全 → 輕量轉述，不再多花一次 LLM
-                print(f"   🧩 [Route] 中介輕量轉述 1 筆（tier 安全）→ 回上游 as {who}")
-                await self._send_route_answer(upstream, qid, pool[0].get("answer", ""),
-                                              who=who, tier=up_tier, via=[])
-                return
-            merged, pool = await self._merge_pool(qid, query, up_tier=up_tier)
-            print(f"   🧩 [Route] 中介整理 {len(pool)} 筆（含降權過濾）→ 回上游 as {who}")
+            # 忠實彙整：保留具體值、不改寫；多筆就條列
+            merged = kept[0].get("answer", "") if len(kept) == 1 else \
+                "\n".join(f"- {it.get('answer','')}" for it in kept)
+            print(f"   🧩 [Route] 中介彙整 {len(kept)} 筆（tier 過濾後忠實保留）→ 回上游 as {who}")
             await self._send_route_answer(upstream, qid, merged, who=who, tier=up_tier, via=[])
         except Exception as e:
-            print(f"   ⚠️ [Route] 中介整理失敗：{e}")
+            print(f"   ⚠️ [Route] 中介彙整失敗：{e}")
 
     async def route_ask(self, goal: str, ttl: int = 2, window: float = 200.0) -> str:
         """origin：對信任圖發 ROUTE_QUERY，沿鏈收集多來源答案，整理成終答案。"""
