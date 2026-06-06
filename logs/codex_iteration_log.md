@@ -332,3 +332,35 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git diff --cached --check`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. No whitespace errors in staged diff.
+
+## 2026-06-07 - Commit And Publish
+
+### Tool: `functions.exec_command`
+- Command: `git add logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Restaged the log after adding staged-review entries.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed staged changes for `README.md`, `app_layer.py`, `logs/codex_iteration_log.md`, `setup.md`, `share_audit.py`, `test_security.py`, and `test_share_audit.py`.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --cached --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged diff: 7 files changed, 627 insertions, 3 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --cached --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors in staged diff.
+
+### Tool: `functions.exec_command`
+- Command: `git commit -m "Add offline share exposure audit"`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created commit `8d27cc2` with 7 files changed, 627 insertions, 3 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git push -u origin codex/product-iteration-20260607`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Pushed new branch `codex/product-iteration-20260607` to `origin` and set upstream tracking. GitHub PR URL: `https://github.com/yenchu-ntu-csie/cnl-final/pull/new/codex/product-iteration-20260607`.
