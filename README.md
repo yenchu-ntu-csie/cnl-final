@@ -18,6 +18,7 @@
 | `app_layer.py` | 應用層 | 解析 JSON、`share/` 四區的權限/路徑檢查、執行 read/append/list/ask |
 | `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate` / `next_step` / `summarize` / `capability_probe` / `plan_question` / `group_summarize`（嚴格 prompt 分隔） |
 | `agents.py` | 白名單 | 管理 `agents.json`（agent list + per-peer tier） |
+| `share_audit.py` | 稽核工具 | 離線檢查某個 peer/tier 能 list/read/ask 到哪些 `share/` 路徑與 context 統計（不印內容） |
 | `script/run_A.sh` `run_B.sh` | 便利腳本 | 一鍵跑收訊方 / 送訊方 |
 | `setup.md` | 文件 | 環境準備、兩台機器部署 |
 
@@ -53,6 +54,16 @@ python3 agents.py remove <對方公鑰>
 | `share/personal/` | personal | ✅ | ❌ |
 
 `ask` 也受 tier 限制 —— A 端只把對方 tier 能看的 zone 內容餵給 Ollama，更高權限的 zone 連 LLM 視野都看不到。
+`ask`/`capability` context 也會跳過 realpath 逃出 `share/` 的 symlink，避免把 zone 裡的捷徑變成越權讀取。
+
+啟動節點或調高 tier 前，可以先跑離線稽核：
+
+```bash
+python3 share_audit.py --peer-pubkey <peer-pubkey>
+python3 share_audit.py --tier task --share share --json
+```
+
+稽核只顯示路徑、zone 權限與 `ask` context 的 chunk/byte 統計，不列印檔案內容。
 
 ### 2.4 路徑安全
 `_check` 解析後若不在 `share/` 內 → `path_denied`（擋 `../`、絕對路徑、symlink 逃逸）。

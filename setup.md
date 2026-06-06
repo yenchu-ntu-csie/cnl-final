@@ -135,6 +135,15 @@ python3 agents.py set-tier <peer-pubkey> personal           # change later, sees
 python3 agents.py list                                       # shows the tier column
 ```
 
+Before starting your node or raising a peer's tier, audit the exact content-free exposure surface:
+
+```bash
+python3 share_audit.py --peer-pubkey <peer-pubkey>
+python3 share_audit.py --tier task --json
+```
+
+The audit shows visible paths, zone permissions, and how many text chunks/bytes `ask` could use. It never prints file contents.
+
 Tiers (low → high): `common` < `task` < `personal`. A peer only ever sees zones at or below their tier — for `read`, `append`, `list`, **and** what the local AI is allowed to use as `ask` context. A `common` peer asking about your `personal/` files literally never has them in the model's context, so the AI cannot leak them (not just "refuses" — they're absent).
 
 > Changing a peer's tier takes effect when the **receiver** node restarts (the trust list is loaded at startup).

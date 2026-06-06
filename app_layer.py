@@ -233,16 +233,20 @@ def _collect_ask_context(share: str, tier: str = DEFAULT_TIER) -> List[str]:
     # 只走這個 tier 被允許的 zone（tier 不夠的資料夾根本不進 LLM context）
     for zone in sorted(_zones_for_tier(tier)):
         zone_root = os.path.join(share_root, zone)
-        if not os.path.isdir(zone_root):
+        zone_root_real = os.path.realpath(zone_root)
+        if not os.path.isdir(zone_root_real):
             continue
-        for root, _, files in os.walk(zone_root):
+        for root, _, files in os.walk(zone_root_real):
             for name in sorted(files):
                 if name.startswith("."):
                     continue
                 full = os.path.join(root, name)
+                resolved = os.path.realpath(full)
+                if os.path.commonpath([zone_root_real, resolved]) != zone_root_real:
+                    continue
                 rel = os.path.relpath(full, share_root)
                 try:
-                    with open(full, encoding="utf-8") as f:
+                    with open(resolved, encoding="utf-8") as f:
                         body = f.read()
                 except (UnicodeDecodeError, OSError):
                     continue   # 跳過非文字檔

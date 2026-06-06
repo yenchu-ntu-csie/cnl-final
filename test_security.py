@@ -109,6 +109,21 @@ def test_unknown_upstream_defaults_common():
     print("✅ 未知上游 → 預設 common（不洩 personal）")
 
 
+def test_ask_context_skips_symlink_escape():
+    share = _seed_share()
+    outside = os.path.join(tempfile.mkdtemp(), "outside_secret.md")
+    with open(outside, "w", encoding="utf-8") as f:
+        f.write("OUTSIDE_SECRET omega")
+    os.symlink(outside, os.path.join(share, "read-only", "leak.md"))
+    os.symlink(os.path.join(share, "personal", "s.md"),
+               os.path.join(share, "read-only", "zone_leak.md"))
+    ctx = "\n".join(app_layer._collect_ask_context(share, "personal"))
+    assert "PUBLIC_FACT" in ctx, ctx
+    assert "OUTSIDE_SECRET" not in ctx, "ask context 不該跟隨 share/ 外的 symlink：\n" + ctx
+    assert "read-only/zone_leak.md" not in ctx, "ask context 不該跟隨跨 zone 的 symlink：\n" + ctx
+    print("✅ ask/capability context → 跳過 share/ 外 symlink")
+
+
 if __name__ == "__main__":
     test_empty_whitelist_rejects()
     test_unknown_sender_rejected()
@@ -116,4 +131,5 @@ if __name__ == "__main__":
     test_s4_common_upstream_excludes_personal()
     test_s4_personal_upstream_includes_personal()
     test_unknown_upstream_defaults_common()
+    test_ask_context_skips_symlink_escape()
     print("\n🎉 ALL SECURITY TESTS PASSED")
