@@ -54,6 +54,7 @@ def _seed():
     agents_file = os.path.join(work, "agents.json")
     pub = "c" * 64
     agents.add(pub, "Carol", agents_file, tier="task")
+    agents.add("d" * 64, "Dave", agents_file, tier="personal")
     return work, share, agents_file, pub
 
 
@@ -233,6 +234,15 @@ def _page_state(cdp):
           previewTier: document.querySelector('#previewTier')?.textContent,
           previewEntries: document.querySelector('#previewEntries')?.textContent,
           previewHasPersonal: document.querySelector('#previewList')?.innerText.includes('personal/diary.md') || false,
+          matrixState: document.querySelector('#matrixState')?.textContent,
+          matrixText: document.querySelector('#matrixRows')?.innerText || '',
+          matrixPersonalRows: document.querySelectorAll('.matrix-row-personal').length,
+          matrixHasPersonalPath: document.querySelector('#matrixRows')?.innerText.includes('personal/diary.md') || false,
+          matrixHasUndefined: document.querySelector('#matrixRows')?.innerText.includes('undefined') || false,
+          matrixPanelOverflowX: (() => {
+            const body = document.querySelector('[data-testid="peer-matrix-panel"] .panel-body');
+            return body ? body.scrollWidth > body.clientWidth : false;
+          })(),
           width: document.documentElement.clientWidth,
           overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth
         }))()"""
@@ -271,6 +281,16 @@ def main():
         assert common["hasTask"] is False, common
         assert common["hasPersonalPath"] is False, common
         assert common["hasSecretContent"] is False, common
+        assert common["matrixState"] == "2 peers", common
+        assert "Carol" in common["matrixText"], common
+        assert "Dave" in common["matrixText"], common
+        assert common["matrixPersonalRows"] == 1, common
+        assert common["matrixHasPersonalPath"] is False, common
+        assert common["matrixHasUndefined"] is False, common
+        cdp.eval("document.querySelector('[data-testid=\"peer-matrix-panel\"]').scrollIntoView({block: 'start'});")
+        time.sleep(0.2)
+        matrix_png = os.path.join(work, "share-audit-matrix.png")
+        _screenshot(cdp, matrix_png)
 
         cdp.eval("document.querySelector('[data-tier=\"task\"]').click(); document.querySelector('#runAudit').click();")
         _wait_status(cdp)
@@ -285,11 +305,12 @@ def main():
         cdp.eval("document.querySelector('#mode').value = 'peer'; document.querySelector('#mode').dispatchEvent(new Event('change')); document.querySelector('#loadPeers').click();")
         deadline = time.time() + 8
         while time.time() < deadline:
-            if cdp.eval("document.querySelector('#status')?.textContent") == "Loaded 1 peers":
+            if cdp.eval("document.querySelector('#status')?.textContent") == "Loaded 2 peers":
                 break
             time.sleep(0.1)
         peers = cdp.eval("[...document.querySelector('#peer').options].map(o => o.textContent).join('|')")
         assert peers.startswith("Carol"), peers
+        assert "Dave" in peers, peers
         cdp.eval("document.querySelector('#runAudit').click();")
         _wait_status(cdp)
         peer = _page_state(cdp)
@@ -311,14 +332,17 @@ def main():
         time.sleep(0.4)
         mobile = _page_state(cdp)
         assert mobile["overflowX"] is False, mobile
+        assert mobile["matrixPanelOverflowX"] is False, mobile
         mobile_png = os.path.join(work, "share-audit-mobile.png")
         _screenshot(cdp, mobile_png)
 
         print("✅ browser common tier hides task/personal")
         print("✅ browser task tier reveals task but not personal")
         print("✅ browser peer flow loads Carol from agents.json")
+        print("✅ browser peer matrix lists all peers and highlights personal tier")
         print("✅ browser trust preview shows newly exposed personal paths without contents")
         print("✅ mobile viewport has no horizontal overflow")
+        print(f"MATRIX_SCREENSHOT={matrix_png}")
         print(f"DESKTOP_SCREENSHOT={desktop_png}")
         print(f"PREVIEW_SCREENSHOT={preview_png}")
         print(f"MOBILE_SCREENSHOT={mobile_png}")

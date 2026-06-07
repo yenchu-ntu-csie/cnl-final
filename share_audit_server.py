@@ -327,6 +327,27 @@ APP_HTML = """<!doctype html>
     .risk.good-line { border-left-color: var(--green); }
     .risk.danger-line { border-left-color: var(--red); }
     .risk strong { display: block; margin-bottom: 3px; }
+    .matrix-table {
+      min-width: 760px;
+    }
+    .matrix-table th, .matrix-table td {
+      white-space: nowrap;
+    }
+    .matrix-table td:first-child {
+      white-space: normal;
+      min-width: 150px;
+    }
+    .matrix-table td::before {
+      display: none;
+    }
+    .matrix-row-personal {
+      background: #fff8ee;
+    }
+    .zone-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
     .preview-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -400,6 +421,43 @@ APP_HTML = """<!doctype html>
         padding-right: 4px;
         font-size: 12px;
       }
+      .matrix-table {
+        min-width: 0;
+      }
+      .matrix-table thead {
+        display: none;
+      }
+      .matrix-table,
+      .matrix-table tbody,
+      .matrix-table tr,
+      .matrix-table td {
+        display: block;
+        width: 100%;
+      }
+      .matrix-table tr {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .matrix-table tr:last-child {
+        border-bottom: 0;
+      }
+      .matrix-table td {
+        display: grid;
+        grid-template-columns: minmax(86px, 0.42fr) minmax(0, 1fr);
+        gap: 10px;
+        border-bottom: 0;
+        white-space: normal;
+      }
+      .matrix-table td:first-child {
+        min-width: 0;
+      }
+      .matrix-table td::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
     }
   </style>
 </head>
@@ -458,6 +516,9 @@ APP_HTML = """<!doctype html>
           <button class="secondary" id="loadPeers" type="button" data-testid="load-peers">Load peers</button>
           <button class="primary" id="runAudit" type="button" data-testid="run-audit">Run audit</button>
         </div>
+        <div class="field" style="margin-top: 10px;">
+          <button class="secondary" id="loadMatrix" type="button" data-testid="load-matrix">Load matrix</button>
+        </div>
       </aside>
       <section class="workspace">
         <div class="panel error" id="error"></div>
@@ -515,6 +576,29 @@ APP_HTML = """<!doctype html>
           </div>
           <div class="panel-body">
             <div class="file-list" id="fileList"></div>
+          </div>
+        </section>
+        <section class="panel" data-testid="peer-matrix-panel">
+          <div class="panel-head">
+            <h2>Peer Exposure Matrix</h2>
+            <span class="badge info" id="matrixState">not loaded</span>
+          </div>
+          <div class="panel-body">
+            <table class="matrix-table" aria-label="Peer exposure matrix">
+              <thead>
+                <tr>
+                  <th>Peer</th>
+                  <th>Tier</th>
+                  <th>Visible zones</th>
+                  <th>Entries</th>
+                  <th>Ask chunks</th>
+                  <th>Append zones</th>
+                </tr>
+              </thead>
+              <tbody id="matrixRows">
+                <tr><td colspan="6" class="muted">Load peers or run an audit to populate the matrix.</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
         <section class="panel" id="previewPanel" hidden>
@@ -585,8 +669,11 @@ APP_HTML = """<!doctype html>
       previewAskDelta: document.getElementById("previewAskDelta"),
       previewBytes: document.getElementById("previewBytes"),
       previewList: document.getElementById("previewList"),
+      matrixState: document.getElementById("matrixState"),
+      matrixRows: document.getElementById("matrixRows"),
       runAudit: document.getElementById("runAudit"),
-      loadPeers: document.getElementById("loadPeers")
+      loadPeers: document.getElementById("loadPeers"),
+      loadMatrix: document.getElementById("loadMatrix")
     };
     let selectedTier = "common";
     let peerTiers = {};
@@ -621,6 +708,7 @@ APP_HTML = """<!doctype html>
     function setBusy(isBusy) {
       els.runAudit.disabled = isBusy;
       els.loadPeers.disabled = isBusy;
+      els.loadMatrix.disabled = isBusy;
     }
     function selectTier(tier) {
       const allowed = ["common", "task", "personal"];
@@ -763,6 +851,38 @@ APP_HTML = """<!doctype html>
         els.previewList.innerHTML = zoneRows + entryRows;
       }
     }
+    function renderMatrix(data) {
+      const rows = data.matrix || [];
+      els.matrixState.textContent = `${rows.length} peers`;
+      els.matrixState.className = `badge ${rows.some(row => row.tier === "personal") ? "warn" : "ok"}`;
+      if (!rows.length) {
+        els.matrixRows.innerHTML = `<tr><td colspan="6" class="muted">No peers in agents file</td></tr>`;
+        return;
+      }
+      els.matrixRows.innerHTML = rows.map(row => {
+        const zones = row.visible_zones.map(zone => `<span class="badge ${zone === "personal" ? "warn" : "info"}">${htmlEscape(zone)}</span>`).join("");
+        const append = row.append_zones.length ? row.append_zones.map(zone => `<span class="badge warn">${htmlEscape(zone)}</span>`).join("") : `<span class="badge info">none</span>`;
+        const label = row.name || row.pubkey.slice(0, 12);
+        return `
+          <tr class="${row.tier === "personal" ? "matrix-row-personal" : ""}">
+            <td data-label="Peer">${htmlEscape(label)}<div class="muted">${htmlEscape(row.pubkey.slice(0, 16))}...</div></td>
+            <td data-label="Tier">${badge(row.tier, row.tier === "personal" ? "warn" : "info")}</td>
+            <td data-label="Visible zones"><div class="zone-pills">${zones}</div></td>
+            <td data-label="Entries">${row.entry_count}</td>
+            <td data-label="Ask chunks">${row.ask_context.chunks}</td>
+            <td data-label="Append zones"><div class="zone-pills">${append}</div></td>
+          </tr>
+        `;
+      }).join("");
+    }
+    async function loadMatrix() {
+      const data = await apiGet("/api/matrix", {
+        share: els.share.value,
+        agents_file: els.agentsFile.value,
+        path: els.path.value
+      });
+      renderMatrix(data);
+    }
     async function runPreview() {
       if (els.mode.value !== "peer" || !els.peer.value) return;
       const preview = await apiGet("/api/preview-tier-change", {
@@ -789,6 +909,7 @@ APP_HTML = """<!doctype html>
         const data = await apiGet("/api/audit", query);
         renderAudit(data);
         await runPreview();
+        await loadMatrix();
         setStatus("Audit complete");
       } catch (err) {
         showError(err.message);
@@ -813,6 +934,18 @@ APP_HTML = """<!doctype html>
       }
     });
     els.loadPeers.addEventListener("click", loadPeers);
+    els.loadMatrix.addEventListener("click", () => {
+      showError("");
+      setStatus("Loading matrix");
+      setBusy(true);
+      loadMatrix()
+        .then(() => setStatus("Matrix loaded"))
+        .catch(err => {
+          showError(err.message);
+          setStatus("Matrix failed");
+        })
+        .finally(() => setBusy(false));
+    });
     els.runAudit.addEventListener("click", runAudit);
     async function init() {
       const qs = new URLSearchParams(window.location.search);
@@ -993,6 +1126,50 @@ def _preview_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
     }
 
 
+def _matrix_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
+    share = _first(qs, "share", "share")
+    agents_file = _first(qs, "agents_file", agents.DEFAULT_PATH)
+    path = _first(qs, "path", "")
+    loaded = agents.load(agents_file)
+    tier_audits = {}
+    rows = []
+    try:
+        for pubkey, meta in sorted(loaded.items(), key=lambda item: (item[1].get("name", ""), item[0])):
+            tier = agents.get_tier(meta)
+            if tier not in tier_audits:
+                tier_audits[tier] = share_audit.build_audit(share, tier, path)
+            audit = tier_audits[tier]
+            visible_zones = [zone["zone"] for zone in audit["zones"] if zone["visible"]]
+            append_zones = [zone["zone"] for zone in audit["zones"] if zone["append"]]
+            rows.append({
+                "pubkey": pubkey,
+                "name": meta.get("name", ""),
+                "tier": tier,
+                "visible_zones": visible_zones,
+                "visible_zone_count": len(visible_zones),
+                "entry_count": len(audit["list"]["entries"]) if audit["list"]["ok"] else 0,
+                "list_ok": audit["list"]["ok"],
+                "list_error": audit["list"]["error"],
+                "ask_context": {
+                    "chunks": audit["ask_context"]["text_chunks"],
+                    "content_included": False,
+                },
+                "append_zones": append_zones,
+                "append_zone_count": len(append_zones),
+                "personal_tier": tier == "personal",
+            })
+    except ValueError as e:
+        return 400, {"ok": False, "error": str(e)}
+    return 200, {
+        "ok": True,
+        "share": os.path.realpath(share),
+        "agents_file": os.path.realpath(agents_file),
+        "path": path,
+        "peer_count": len(rows),
+        "matrix": rows,
+    }
+
+
 class AuditHandler(BaseHTTPRequestHandler):
     default_share = "share"
     default_agents_file = agents.DEFAULT_PATH
@@ -1036,6 +1213,14 @@ class AuditHandler(BaseHTTPRequestHandler):
             if "agents_file" not in qs:
                 qs["agents_file"] = [self.default_agents_file]
             status, payload = _preview_payload(qs)
+            _json_response(self, status, payload)
+            return
+        if parsed.path == "/api/matrix":
+            if "share" not in qs:
+                qs["share"] = [self.default_share]
+            if "agents_file" not in qs:
+                qs["agents_file"] = [self.default_agents_file]
+            status, payload = _matrix_payload(qs)
             _json_response(self, status, payload)
             return
         _json_response(self, 404, {"ok": False, "error": "not_found"})

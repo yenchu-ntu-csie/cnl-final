@@ -34,12 +34,35 @@ The `Trust Change Preview` panel shows the delta between the peer's current tier
 - Ask context chunk and byte increase.
 - Paths only, never note contents.
 
+## Peer Exposure Matrix
+
+Click `Load matrix` to summarize every peer in `agents.json` at once. Each row uses the peer's normalized tier and the same content-free audit rules as the single-peer view.
+
+The matrix shows:
+
+- `Peer`: peer display name, falling back to the public-key prefix.
+- `Tier`: normalized `common`, `task`, or `personal`.
+- `Visible zones`: zone names this peer can read.
+- `Entries`: visible listing count only, not paths.
+- `Ask chunks`: aggregate text chunk count available to `ask`/`capability`.
+- `Append zones`: appendable zone names.
+
+Use the matrix to spot broad trust posture before drilling into one peer. Rows at `personal` tier are highlighted because those peers can see `share/personal/`.
+
+Notes:
+
+- Peers with the same tier usually have the same exposure because access is tier-based.
+- The matrix intentionally omits visible path names and note contents; inspect a single peer when you need path-level detail.
+- If `Path filter` is set, entry counts follow that filter, but ask chunk counts still describe the tier's full `ask` context.
+- Tier changes in `agents.json` still require the receiver node to restart before a running node uses the new tier.
+
 ## How To Read The Screen
 
 - `Visible zones`: zones this peer/tier can list, read, and include in `ask` context.
 - `Visible entries`: visible directories and files after tier filtering and optional path filtering.
 - `Ask chunks`: number and byte size of text chunks available to `ask`/`capability`.
 - `Appendable zones`: zones where the peer can write new content.
+- `Peer Exposure Matrix`: every configured peer side by side with aggregate exposure counts.
 - `Risk Notes`: content-free reminders about hidden zones, append surface, and symlink guards.
 - `Raw audit JSON`: same content-free result for debugging or report capture.
 

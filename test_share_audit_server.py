@@ -129,6 +129,40 @@ def test_api_previews_trust_change_without_contents():
         server.server_close()
 
 
+def test_api_serves_peer_matrix_without_contents_or_paths():
+    _, share, agents_file, pub = _seed()
+    agents.add("a" * 64, "Alice", agents_file, tier="common")
+    agents.add("c" * 64, "Carol", agents_file, tier="personal")
+    server = share_audit_server.make_server("127.0.0.1", 0, share, agents_file)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        matrix = _get_json(base, "/api/matrix", share=share, agents_file=agents_file)
+        rendered = json.dumps(matrix, ensure_ascii=False)
+        by_name = {row["name"]: row for row in matrix["matrix"]}
+        assert matrix["ok"] is True, matrix
+        assert matrix["peer_count"] == 3, matrix
+        assert by_name["Alice"]["tier"] == "common", by_name
+        assert by_name["Bob"]["pubkey"] == pub, by_name
+        assert by_name["Carol"]["tier"] == "personal", by_name
+        assert by_name["Carol"]["personal_tier"] is True, by_name["Carol"]
+        assert by_name["Carol"]["visible_zone_count"] > by_name["Bob"]["visible_zone_count"], by_name
+        assert by_name["Bob"]["entry_count"] > by_name["Alice"]["entry_count"], by_name
+        assert by_name["Carol"]["ask_context"]["chunks"] > by_name["Bob"]["ask_context"]["chunks"], by_name
+        assert "bytes" not in by_name["Carol"]["ask_context"], by_name["Carol"]
+        assert "personal" in by_name["Carol"]["visible_zones"], by_name["Carol"]
+        assert "entries" not in by_name["Carol"], by_name["Carol"]
+        assert "SECRET gamma" not in rendered, rendered
+        assert "TASK beta" not in rendered, rendered
+        assert "PUBLIC alpha" not in rendered, rendered
+        assert "personal/secret.md" not in rendered, rendered
+        print("✅ audit UI API serves content-free peer exposure matrix")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_html_is_safe_and_browser_testable():
     _, _, agents_file, _ = _seed()
     unsafe_share = 'share" autofocus onfocus="alert(1)'
@@ -176,6 +210,7 @@ if __name__ == "__main__":
     test_api_serves_audit_and_agents()
     test_api_rejects_missing_subject()
     test_api_previews_trust_change_without_contents()
+    test_api_serves_peer_matrix_without_contents_or_paths()
     test_html_is_safe_and_browser_testable()
     test_rejects_dns_rebinding_host_header()
     print("\n🎉 share-audit web API tests passed")

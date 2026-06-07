@@ -785,3 +785,373 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git push`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Pushed `codex/ui-ux-10x-20260607` from `6b0655e` to `104dd2d`.
+
+## 2026-06-07 UI/UX Iteration 3 Resume - Peer Exposure Matrix
+
+### Tool: `tool_search.tool_search_tool`
+- Query: `multi-agent subagent spawn send_input check status perpetual agent`
+- Result: found multi-agent tools including `send_input`, `spawn_agent`, `wait_agent`, `resume_agent`, and `close_agent`.
+
+### Tool: `functions.exec_command`
+- Command: `pwd && git status --short --branch && git log --oneline -5`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed workdir, branch `codex/ui-ux-10x-20260607` tracking origin, latest commits through `41438fe Log trust preview iteration`, and a modified `share_audit_server.py`.
+
+### Tool: `functions.exec_command`
+- Command: `rg --files -g 'AGENTS.md' -g 'share_audit_server.py' -g 'test_share_audit_server.py' -g 'test_share_audit_ui_browser.py' -g 'docs/share-audit-ui.md' -g 'logs/codex_iteration_log.md'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Located the dashboard server, API/browser tests, UI docs, and iteration log.
+
+### Tool: `functions.exec_command`
+- Command: `tail -80 logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed the log ended after trust-preview push entries.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Found in-progress Peer Exposure Matrix UI/API changes in `share_audit_server.py`.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '1,220p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed imports, server description, and base HTML/CSS structure.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '430,760p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed current HTML controls, summary panels, matrix panel, and main JS element bindings.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba test_share_audit_server.py | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed API tests already included a content-free peer matrix test.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Harvey `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: queued docs/understanding subagent task to review Peer Exposure Matrix docs/code truth and suggest next UI direction.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: queued implementation/cross-check subagent task to inspect matrix security, content-free behavior, responsive table risk, and API shape.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '760,1225p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed preview rendering, matrix rendering, `/api/matrix`, Host guard, and server factory code.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba test_share_audit_ui_browser.py | sed -n '1,360p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed dependency-free Chrome DevTools browser test and saw matrix browser assertions were incomplete.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba docs/share-audit-ui.md | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed current UI docs and matrix wording.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat && git diff --name-only`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Diff showed `share_audit_server.py` and `test_share_audit_server.py` modified.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API tests passed, including content-free peer matrix and Host header rejection.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '220,430p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed table, panel-body overflow, matrix CSS, and responsive rules.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed new server test asserts matrix has aggregate exposure only, no entries array, no contents, and no personal file paths.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- share_audit_server.py | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed matrix HTML/CSS/JS/API diff for integration points.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`, `test_share_audit_ui_browser.py`, `docs/share-audit-ui.md`
+- Result: first patch attempt failed due to stale context; no files were changed by that failed patch.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '330,345p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Rechecked exact matrix CSS context.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '52,62p' test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed browser seed already included Carol and Dave peers.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '220,242p' test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed current browser page-state fields for matrix.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '268,330p' test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed existing browser assertions and print output for matrix.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '330,350p' test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Checked screenshot print block before adding matrix screenshot output.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`, `test_share_audit_ui_browser.py`
+- Result: exit 0. Added matrix table min-width, browser assertion that matrix omits personal paths, and a matrix screenshot capture/print.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: first docs patch attempt failed because matrix docs already existed with different wording; no files changed by that failed patch.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba docs/share-audit-ui.md | sed -n '24,75p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed Peer Exposure Matrix docs existed and identified label wording to align with the actual UI.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "def build_audit|ask_context|path" share_audit.py | head -80 && nl -ba share_audit.py | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Verified code truth: path filters list entries, while ask context is collected for the full tier.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: exit 0. Updated matrix docs to match current column names and added matrix to screen-reading guidance.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed after matrix browser/doc changes.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API tests passed, including content-free matrix and no file contents.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. CLI exposure-audit tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Security tests passed, including fail-closed peer filtering and symlink escape guard.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Real Chrome UI test passed and produced screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_88nv97ah/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_88nv97ah/share-audit-matrix.png`
+- Result: visually inspected matrix screenshot; matrix was readable but later improvement opportunity found for mobile layout.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_88nv97ah/share-audit-desktop.png`
+- Result: visually inspected desktop screenshot; tier audit and matrix remained readable.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_88nv97ah/share-audit-preview.png`
+- Result: visually inspected trust-preview screenshot with matrix above preview.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_88nv97ah/share-audit-mobile.png`
+- Result: visually inspected mobile screenshot; page had no overflow, but matrix still required internal horizontal scrolling.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: first mobile-stacked matrix patch attempt failed due to stale row context; no files changed by that failed patch.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '328,350p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Rechecked matrix CSS context for narrower patch.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '408,430p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Rechecked mobile media-query context.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '820,840p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Rechecked generated matrix row HTML.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Added mobile stacked matrix CSS, `data-label` cells, and temporarily added ask-context bytes display.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Added matrix panel overflow assertion to the Chrome UI test.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed after stacked mobile matrix work.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API tests passed after stacked mobile matrix work.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. CLI exposure-audit tests passed after stacked mobile matrix work.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Security tests passed after stacked mobile matrix work.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Chrome UI test passed and produced screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_pik48jjs/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_pik48jjs/share-audit-matrix.png`
+- Result: visually inspected matrix screenshot and found `undefined bytes`, revealing a front-end/API field mismatch.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_pik48jjs/share-audit-mobile.png`
+- Result: visually inspected mobile screenshot; stacked matrix layout worked but also showed the `undefined bytes` issue.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_pik48jjs/share-audit-preview.png`
+- Result: visually inspected trust-preview screenshot; preview remained readable.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_pik48jjs/share-audit-desktop.png`
+- Result: visually inspected desktop screenshot and confirmed `undefined bytes` was visible there too.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "ask_context|bytes|byte" share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed server test intentionally asserts matrix `ask_context` has no `bytes` field, while UI was trying to render it.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '1088,1122p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed preview payload bytes fields to distinguish preview from matrix.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- share_audit_server.py | sed -n '1,240p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed matrix diff and verified API omits matrix bytes by design.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Removed matrix bytes display so UI matches content-minimal API payload.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: exit 0. Updated docs to say matrix shows aggregate ask chunk count, not byte count.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Added browser regression assertion that matrix text never contains `undefined`.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final syntax check passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final API tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final CLI exposure-audit tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final security tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final real Chrome UI test passed, including no matrix `undefined`, no page overflow, no matrix panel overflow, and screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_heg2s3wt/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_heg2s3wt/share-audit-matrix.png`
+- Result: visually inspected final matrix screenshot; desktop matrix is readable and no longer shows undefined values.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_heg2s3wt/share-audit-mobile.png`
+- Result: visually inspected final mobile screenshot; matrix is stacked, readable, and not horizontally clipped.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_heg2s3wt/share-audit-preview.png`
+- Result: visually inspected final preview screenshot; matrix and trust-preview panels coexist cleanly.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_heg2s3wt/share-audit-desktop.png`
+- Result: visually inspected final desktop screenshot; task-tier audit and matrix remain readable.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Targets: Harvey `019ea14d-5b44-7733-a597-6e630778810b`, Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: both completed. Docs subagent confirmed matrix docs are needed and suggested row-level matrix actions next. Implementation subagent confirmed matrix should omit paths and bytes, flagged no contents returned, and reported tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Modified files: docs, log, server, API test, browser UI test.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Diff before final docs wording patch: 5 files changed, 591 insertions, 2 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- share_audit_server.py | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed server/UI matrix diff before commit.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- test_share_audit_server.py test_share_audit_ui_browser.py docs/share-audit-ui.md | sed -n '1,320p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed test/docs matrix diff before commit.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: exit 0. Reworded matrix docs from `ask chunk/byte counts` to `ask chunk counts` to match the UI/API.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final pre-stage diff: 5 files changed, 591 insertions, 2 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Branch `codex/ui-ux-10x-20260607`; modified docs, log, server, API test, and browser UI test.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "undefined bytes|ask chunk/byte|bytes.*matrix|matrix.*bytes" share_audit_server.py docs/share-audit-ui.md test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. No stale matrix-bytes or undefined-bytes wording remained.
