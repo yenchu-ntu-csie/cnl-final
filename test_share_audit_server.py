@@ -93,6 +93,42 @@ def test_api_rejects_missing_subject():
         server.server_close()
 
 
+def test_api_previews_trust_change_without_contents():
+    _, share, agents_file, pub = _seed()
+    server = share_audit_server.make_server("127.0.0.1", 0, share, agents_file)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        preview = _get_json(
+            base,
+            "/api/preview-tier-change",
+            share=share,
+            agents_file=agents_file,
+            peer_pubkey=pub,
+            proposed_tier="personal",
+        )
+        rendered = json.dumps(preview, ensure_ascii=False)
+        exposed = preview["preview"]["newly_exposed"]
+        new_paths = {entry["path"] for entry in exposed["entries"]}
+        assert preview["preview"]["current_tier"] == "task", preview
+        assert preview["preview"]["proposed_tier"] == "personal", preview
+        assert exposed["zones"] == ["personal"], preview
+        assert "personal/secret.md" in new_paths, preview
+        assert preview["preview"]["ask_context"]["delta"]["chunks"] == 1, preview
+        assert preview["preview"]["ask_context"]["delta"]["bytes"] > 0, preview
+        assert preview["preview"]["ask_context"]["content_included"] is False, preview
+        assert "current" not in preview, preview
+        assert "proposed" not in preview, preview
+        assert "diff" not in preview, preview
+        assert "SECRET gamma" not in rendered, rendered
+        assert "TASK beta" not in rendered, rendered
+        print("✅ audit UI API previews tier changes without file contents")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_html_is_safe_and_browser_testable():
     _, _, agents_file, _ = _seed()
     unsafe_share = 'share" autofocus onfocus="alert(1)'
@@ -139,6 +175,7 @@ def test_rejects_dns_rebinding_host_header():
 if __name__ == "__main__":
     test_api_serves_audit_and_agents()
     test_api_rejects_missing_subject()
+    test_api_previews_trust_change_without_contents()
     test_html_is_safe_and_browser_testable()
     test_rejects_dns_rebinding_host_header()
     print("\n🎉 share-audit web API tests passed")

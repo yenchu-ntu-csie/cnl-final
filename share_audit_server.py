@@ -327,6 +327,28 @@ APP_HTML = """<!doctype html>
     .risk.good-line { border-left-color: var(--green); }
     .risk.danger-line { border-left-color: var(--red); }
     .risk strong { display: block; margin-bottom: 3px; }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .preview-cell {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #ffffff;
+    }
+    .preview-cell .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .preview-cell .value {
+      margin-top: 5px;
+      font-size: 20px;
+      font-weight: 750;
+    }
     details {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -365,6 +387,7 @@ APP_HTML = """<!doctype html>
       .controls { position: static; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid2 { grid-template-columns: 1fr; }
+      .preview-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
       header { align-items: flex-start; flex-direction: column; }
@@ -418,6 +441,14 @@ APP_HTML = """<!doctype html>
         <div class="field" id="peerField" hidden>
           <label for="peer">Peer</label>
           <select id="peer"></select>
+        </div>
+        <div class="field" id="previewField" hidden>
+          <label for="proposedTier">Preview tier change</label>
+          <select id="proposedTier">
+            <option value="common">common</option>
+            <option value="task">task</option>
+            <option value="personal">personal</option>
+          </select>
         </div>
         <div class="field">
           <label for="path">Path filter</label>
@@ -486,6 +517,34 @@ APP_HTML = """<!doctype html>
             <div class="file-list" id="fileList"></div>
           </div>
         </section>
+        <section class="panel" id="previewPanel" hidden>
+          <div class="panel-head">
+            <h2>Trust Change Preview</h2>
+            <span class="badge warn" id="previewState">peer mode</span>
+          </div>
+          <div class="panel-body">
+            <div class="preview-grid">
+              <div class="preview-cell">
+                <div class="label">Tier change</div>
+                <div class="value" id="previewTier">-</div>
+              </div>
+              <div class="preview-cell">
+                <div class="label">New zones</div>
+                <div class="value" id="previewZones">0</div>
+              </div>
+              <div class="preview-cell">
+                <div class="label">New entries</div>
+                <div class="value" id="previewEntries">0</div>
+              </div>
+              <div class="preview-cell">
+                <div class="label">Ask delta</div>
+                <div class="value" id="previewAskDelta">+0</div>
+              </div>
+            </div>
+            <div class="muted" id="previewBytes">+0 bytes, paths only</div>
+            <div class="file-list" id="previewList"></div>
+          </div>
+        </section>
         <details>
           <summary>Raw audit JSON</summary>
           <pre id="rawJson">{}</pre>
@@ -502,6 +561,8 @@ APP_HTML = """<!doctype html>
       mode: document.getElementById("mode"),
       peer: document.getElementById("peer"),
       peerField: document.getElementById("peerField"),
+      previewField: document.getElementById("previewField"),
+      proposedTier: document.getElementById("proposedTier"),
       tierField: document.getElementById("tierField"),
       path: document.getElementById("path"),
       zoneRows: document.getElementById("zoneRows"),
@@ -516,10 +577,19 @@ APP_HTML = """<!doctype html>
       tierBadge: document.getElementById("tierBadge"),
       listState: document.getElementById("listState"),
       rawJson: document.getElementById("rawJson"),
+      previewPanel: document.getElementById("previewPanel"),
+      previewState: document.getElementById("previewState"),
+      previewTier: document.getElementById("previewTier"),
+      previewZones: document.getElementById("previewZones"),
+      previewEntries: document.getElementById("previewEntries"),
+      previewAskDelta: document.getElementById("previewAskDelta"),
+      previewBytes: document.getElementById("previewBytes"),
+      previewList: document.getElementById("previewList"),
       runAudit: document.getElementById("runAudit"),
       loadPeers: document.getElementById("loadPeers")
     };
     let selectedTier = "common";
+    let peerTiers = {};
 
     function setStatus(text) { els.status.textContent = text; }
     function showError(text) {
@@ -544,6 +614,8 @@ APP_HTML = """<!doctype html>
     function setMode() {
       const byPeer = els.mode.value === "peer";
       els.peerField.hidden = !byPeer;
+      els.previewField.hidden = !byPeer;
+      els.previewPanel.hidden = !byPeer;
       els.tierField.hidden = byPeer;
     }
     function setBusy(isBusy) {
@@ -556,6 +628,19 @@ APP_HTML = """<!doctype html>
       document.querySelectorAll("[data-tier]").forEach(button => {
         button.classList.toggle("active", button.dataset.tier === selectedTier);
       });
+    }
+    function nextTier(tier) {
+      if (tier === "common") return "task";
+      if (tier === "task") return "personal";
+      return "personal";
+    }
+    function updateProposedTier() {
+      const current = peerTiers[els.peer.value] || "common";
+      els.proposedTier.value = nextTier(current);
+    }
+    function setProposedTier(tier) {
+      const allowed = ["common", "task", "personal"];
+      if (allowed.includes(tier)) els.proposedTier.value = tier;
     }
     async function apiGet(path, query) {
       const res = await fetch(`${path}?${params(query)}`);
@@ -571,6 +656,7 @@ APP_HTML = """<!doctype html>
       try {
         const data = await apiGet("/api/agents", { agents_file: els.agentsFile.value });
         els.peer.innerHTML = "";
+        peerTiers = {};
         if (!data.peers.length) {
           const opt = document.createElement("option");
           opt.value = "";
@@ -578,11 +664,13 @@ APP_HTML = """<!doctype html>
           els.peer.appendChild(opt);
         } else {
           data.peers.forEach(peer => {
+            peerTiers[peer.pubkey] = peer.tier;
             const opt = document.createElement("option");
             opt.value = peer.pubkey;
             opt.textContent = `${peer.name || peer.pubkey.slice(0, 8)} — ${peer.tier}`;
             els.peer.appendChild(opt);
           });
+          updateProposedTier();
         }
         setStatus(`Loaded ${data.peers.length} peers`);
       } catch (err) {
@@ -645,6 +733,47 @@ APP_HTML = """<!doctype html>
       `).join("");
       els.rawJson.textContent = JSON.stringify(data, null, 2);
     }
+    function renderPreview(data) {
+      const preview = data.preview;
+      const exposed = preview.newly_exposed;
+      const delta = preview.ask_context.delta;
+      els.previewPanel.hidden = false;
+      els.previewState.textContent = `${preview.current_tier} → ${preview.proposed_tier}`;
+      els.previewState.className = `badge ${exposed.entries.length || exposed.zones.length ? "warn" : "ok"}`;
+      els.previewTier.textContent = `${preview.current_tier} → ${preview.proposed_tier}`;
+      els.previewZones.textContent = exposed.zones.length;
+      els.previewEntries.textContent = exposed.entries.length;
+      els.previewAskDelta.textContent = `${delta.chunks >= 0 ? "+" : ""}${delta.chunks}`;
+      els.previewBytes.textContent = `${delta.bytes >= 0 ? "+" : ""}${delta.bytes} bytes, ${preview.current_ask.chunks} → ${preview.proposed_ask.chunks} ask chunks`;
+      if (!exposed.entries.length && !exposed.zones.length) {
+        els.previewList.innerHTML = `<div class="empty">No newly exposed paths at this proposed tier</div>`;
+      } else {
+        const zoneRows = exposed.zones.map(zone => `
+          <div class="file-row">
+            <span class="badge warn">zone</span>
+            <span class="file-path">${htmlEscape(zone)}/ becomes visible</span>
+          </div>
+        `).join("");
+        const entryRows = exposed.entries.map(entry => `
+          <div class="file-row">
+            <span class="badge ${entry.kind === "dir" ? "info" : "ok"}">${entry.kind}</span>
+            <span class="file-path">${htmlEscape(entry.path)}</span>
+          </div>
+        `).join("");
+        els.previewList.innerHTML = zoneRows + entryRows;
+      }
+    }
+    async function runPreview() {
+      if (els.mode.value !== "peer" || !els.peer.value) return;
+      const preview = await apiGet("/api/preview-tier-change", {
+        share: els.share.value,
+        agents_file: els.agentsFile.value,
+        peer_pubkey: els.peer.value,
+        proposed_tier: els.proposedTier.value,
+        path: els.path.value
+      });
+      renderPreview(preview);
+    }
     async function runAudit() {
       showError("");
       setStatus("Auditing");
@@ -659,6 +788,7 @@ APP_HTML = """<!doctype html>
       try {
         const data = await apiGet("/api/audit", query);
         renderAudit(data);
+        await runPreview();
         setStatus("Audit complete");
       } catch (err) {
         showError(err.message);
@@ -673,6 +803,15 @@ APP_HTML = """<!doctype html>
       });
     });
     els.mode.addEventListener("change", setMode);
+    els.peer.addEventListener("change", () => {
+      updateProposedTier();
+      runPreview().catch(err => showError(err.message));
+    });
+    els.proposedTier.addEventListener("change", () => {
+      if (els.mode.value === "peer" && els.peer.value) {
+        runPreview().catch(err => showError(err.message));
+      }
+    });
     els.loadPeers.addEventListener("click", loadPeers);
     els.runAudit.addEventListener("click", runAudit);
     async function init() {
@@ -686,6 +825,7 @@ APP_HTML = """<!doctype html>
         setMode();
         await loadPeers();
         els.peer.value = qs.get("peer_pubkey");
+        if (qs.has("proposed_tier")) setProposedTier(qs.get("proposed_tier"));
       } else {
         setMode();
       }
@@ -782,6 +922,77 @@ def _audit_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
     return 200, {"ok": True, "peer": peer, "audit": audit}
 
 
+def _entry_key(entry: Dict) -> Tuple[str, str]:
+    return entry.get("path", ""), entry.get("kind", "")
+
+
+def _preview_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
+    share = _first(qs, "share", "share")
+    agents_file = _first(qs, "agents_file", agents.DEFAULT_PATH)
+    peer_pubkey = _first(qs, "peer_pubkey", None)
+    proposed_tier = _first(qs, "proposed_tier", None)
+    path = _first(qs, "path", "")
+    if not proposed_tier:
+        return 400, {"ok": False, "error": "missing_proposed_tier"}
+    try:
+        peer = share_audit.resolve_peer(peer_pubkey, agents_file, tier=None)
+        proposed_tier = agents.normalize_tier(proposed_tier)
+        current = share_audit.build_audit(share, peer["tier"], path)
+        proposed = share_audit.build_audit(share, proposed_tier, path)
+    except ValueError as e:
+        return 400, {"ok": False, "error": str(e)}
+
+    current_entries = {_entry_key(entry) for entry in current["list"]["entries"]}
+    new_entries = [
+        entry for entry in proposed["list"]["entries"]
+        if _entry_key(entry) not in current_entries
+    ]
+    current_visible_zones = {zone["zone"] for zone in current["zones"] if zone["visible"]}
+    new_zones = [
+        zone["zone"] for zone in proposed["zones"]
+        if zone["visible"] and zone["zone"] not in current_visible_zones
+    ]
+    current_append_zones = {zone["zone"] for zone in current["zones"] if zone["append"]}
+    newly_appendable = [
+        zone["zone"] for zone in proposed["zones"]
+        if zone["append"] and zone["zone"] not in current_append_zones
+    ]
+    current_chunks = current["ask_context"]["text_chunks"]
+    proposed_chunks = proposed["ask_context"]["text_chunks"]
+    current_bytes = current["ask_context"]["bytes"]
+    proposed_bytes = proposed["ask_context"]["bytes"]
+    preview = {
+        "current_tier": current["tier"],
+        "proposed_tier": proposed["tier"],
+        "path": path,
+        "newly_exposed": {
+            "zones": new_zones,
+            "entries": new_entries,
+            "appendable_zones": newly_appendable,
+        },
+        "current_ask": {
+            "chunks": current_chunks,
+            "bytes": current_bytes,
+        },
+        "proposed_ask": {
+            "chunks": proposed_chunks,
+            "bytes": proposed_bytes,
+        },
+        "ask_context": {
+            "delta": {
+                "chunks": proposed_chunks - current_chunks,
+                "bytes": proposed_bytes - current_bytes,
+            },
+            "content_included": False,
+        },
+    }
+    return 200, {
+        "ok": True,
+        "peer": peer,
+        "preview": preview,
+    }
+
+
 class AuditHandler(BaseHTTPRequestHandler):
     default_share = "share"
     default_agents_file = agents.DEFAULT_PATH
@@ -817,6 +1028,14 @@ class AuditHandler(BaseHTTPRequestHandler):
             if "agents_file" not in qs:
                 qs["agents_file"] = [self.default_agents_file]
             status, payload = _audit_payload(qs)
+            _json_response(self, status, payload)
+            return
+        if parsed.path in ("/api/preview", "/api/preview-tier-change"):
+            if "share" not in qs:
+                qs["share"] = [self.default_share]
+            if "agents_file" not in qs:
+                qs["agents_file"] = [self.default_agents_file]
+            status, payload = _preview_payload(qs)
             _json_response(self, status, payload)
             return
         _json_response(self, 404, {"ok": False, "error": "not_found"})

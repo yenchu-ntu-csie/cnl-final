@@ -230,6 +230,9 @@ def _page_state(cdp):
           hasTask: document.body.innerText.includes('task/demo.md'),
           hasPersonalPath: document.body.innerText.includes('personal/diary.md'),
           hasSecretContent: document.body.innerText.includes('SECRET:'),
+          previewTier: document.querySelector('#previewTier')?.textContent,
+          previewEntries: document.querySelector('#previewEntries')?.textContent,
+          previewHasPersonal: document.querySelector('#previewList')?.innerText.includes('personal/diary.md') || false,
           width: document.documentElement.clientWidth,
           overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth
         }))()"""
@@ -292,7 +295,15 @@ def main():
         peer = _page_state(cdp)
         assert peer["tier"] == "tier: task", peer
         assert peer["hasTask"] is True, peer
-        assert peer["hasPersonalPath"] is False, peer
+        assert peer["previewTier"] == "task → personal", peer
+        assert peer["previewEntries"] == "2", peer
+        assert peer["previewHasPersonal"] is True, peer
+        assert peer["hasPersonalPath"] is True, peer
+        assert peer["hasSecretContent"] is False, peer
+        cdp.eval("document.querySelector('#previewPanel').scrollIntoView({block: 'start'});")
+        time.sleep(0.2)
+        preview_png = os.path.join(work, "share-audit-preview.png")
+        _screenshot(cdp, preview_png)
 
         cdp.send("Emulation.setDeviceMetricsOverride", {
             "width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True,
@@ -306,8 +317,10 @@ def main():
         print("✅ browser common tier hides task/personal")
         print("✅ browser task tier reveals task but not personal")
         print("✅ browser peer flow loads Carol from agents.json")
+        print("✅ browser trust preview shows newly exposed personal paths without contents")
         print("✅ mobile viewport has no horizontal overflow")
         print(f"DESKTOP_SCREENSHOT={desktop_png}")
+        print(f"PREVIEW_SCREENSHOT={preview_png}")
         print(f"MOBILE_SCREENSHOT={mobile_png}")
         print("\n🎉 share-audit browser UI test passed")
     finally:

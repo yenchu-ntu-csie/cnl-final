@@ -597,3 +597,136 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git diff --cached --name-only`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Staged files: `README.md`, `docs/share-audit-ui.md`, `logs/codex_iteration_log.md`, `setup.md`, `share_audit_server.py`, `test_share_audit_server.py`, `test_share_audit_ui_browser.py`.
+
+### Tool: `functions.exec_command`
+- Command: `git add logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Restaged log after adding staged-check entries.
+
+### Tool: `functions.exec_command`
+- Command: `git commit -m "Add share audit dashboard UI"`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created commit `6b0655e` with 7 files changed and 1623 insertions.
+
+### Tool: `functions.exec_command`
+- Command: `git push -u origin codex/ui-ux-10x-20260607`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Pushed new branch `codex/ui-ux-10x-20260607` and set upstream. GitHub PR URL: `https://github.com/yenchu-ntu-csie/cnl-final/pull/new/codex/ui-ux-10x-20260607`.
+
+## 2026-06-07 - UI/UX Iteration 2 Trust Change Preview
+
+### Tool: `functions.update_plan`
+- Result: marked dashboard UI baseline committed/pushed and started trust-change preview iteration.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: `Harvey` (`019ea14d-5b44-7733-a597-6e630778810b`)
+- Message: asked docs/understanding subagent to continue read-only with trust-change preview explanation and checklist guidance.
+- Result: message queued.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: `Chandrasekhar` (`019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`)
+- Message: asked implementation subagent to cross-check trust-change preview implementation and security/UX concerns.
+- Result: message queued.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: added trust-change preview UI elements, peer-mode proposed tier selection, preview rendering, and content-free preview API support. Subsequent inspection showed the active schema is `preview.newly_exposed` with no full current/proposed audit bodies.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_server.py`
+- Result: added API test for `task` to `personal` preview, asserting new personal zone/path are listed while file contents are absent.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "hasPersonal|peer =|browser peer|page_state|SECRET|personal" test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Located browser test assertions that needed to account for preview intentionally showing personal paths.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba test_share_audit_ui_browser.py | sed -n '200,330p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed browser test state extraction and peer-flow assertions.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: updated real browser test to assert trust preview shows `task -> personal`, new entries, and personal path in preview while never exposing `SECRET:` file contents.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Passed API tests including trust-change preview without file contents.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No syntax errors.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: first run exit 1. Real Chrome test found UI was requesting `/api/preview-tier-change` while that run returned 404, so status never returned to `Audit complete`. This exposed an actual UI/API integration issue.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "preview" share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed current server has preview UI IDs, `renderPreview`, `/api/preview-tier-change` request, and route aliases for `/api/preview` plus `/api/preview-tier-change`.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba share_audit_server.py | sed -n '900,1045p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed active preview payload schema and route alias. It returns a narrow `preview` diff rather than full current/proposed audits.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba test_share_audit_server.py | sed -n '70,130p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed API tests target `/api/preview-tier-change` and assert narrow preview schema.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: rerun exit 0. Real Chrome test passed with trust preview: common hides task/personal, task reveals task not personal, peer flow loads Carol, trust preview shows newly exposed personal paths without contents, mobile has no horizontal overflow.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: updated browser test to scroll the preview panel into view and save a dedicated preview screenshot.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: documented trust-change preview in the peer flow and trust checklist.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Real Chrome test passed and wrote desktop, preview, and mobile screenshots.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API/server tests passed with trust preview.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No syntax errors.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_gs3o4osy/share-audit-preview.png`
+- Result: visually inspected trust preview screenshot. It clearly shows `task -> personal`, 1 new zone, 2 new entries, ask +1, and paths `personal/` plus `personal/diary.md`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_gs3o4osy/share-audit-mobile.png`
+- Result: visually inspected mobile screenshot after trust preview; layout remained stacked and readable.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Branch tracks `origin/codex/ui-ux-10x-20260607`; modified `docs/share-audit-ui.md`, `share_audit_server.py`, `test_share_audit_server.py`, `test_share_audit_ui_browser.py`.
+
+### Tool: `functions.exec_command`
+- Command: `git log --oneline --decorate -5`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. HEAD and origin branch at `6b0655e Add share audit dashboard UI`.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Trust-preview diff: 4 files changed, 280 insertions, 2 deletions.

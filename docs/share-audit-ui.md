@@ -22,9 +22,17 @@ Use this to preview what a generic peer at a tier could list and feed into `ask`
 1. Set `Target source` to `Peer from agents file`.
 2. Click `Load peers`.
 3. Select a peer from `agents.json`.
-4. Click `Run audit`.
+4. Choose a proposed tier in `Preview tier change`.
+5. Click `Run audit`.
 
 Use this before raising a real peer from `common` to `task` or `personal`.
+
+The `Trust Change Preview` panel shows the delta between the peer's current tier and the proposed tier:
+
+- New zones that would become visible.
+- New visible paths.
+- Ask context chunk and byte increase.
+- Paths only, never note contents.
 
 ## How To Read The Screen
 
@@ -40,6 +48,7 @@ Use this before raising a real peer from `common` to `task` or `personal`.
 Before increasing trust, verify:
 
 - No unexpected `personal/` paths appear.
+- The trust-change preview does not expose surprising new paths.
 - The append surface is acceptable.
 - `Ask chunks` and bytes are roughly what you expect.
 - The raw JSON contains paths and counts only, not note contents.
