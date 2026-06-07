@@ -1155,3 +1155,33 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `rg -n "undefined bytes|ask chunk/byte|bytes.*matrix|matrix.*bytes" share_audit_server.py docs/share-audit-ui.md test_share_audit_server.py test_share_audit_ui_browser.py`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 1. No stale matrix-bytes or undefined-bytes wording remained.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors after final log/docs edits.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final matrix iteration diff before staging: 5 files changed, 639 insertions, 2 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed modified docs, log, server, API test, and browser UI test before staging.
+
+### Tool: `functions.exec_command`
+- Command: `git add docs/share-audit-ui.md logs/codex_iteration_log.md share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py && git status --short --branch && git diff --cached --stat && git diff --cached --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged matrix iteration files; staged diff had 5 files changed, 639 insertions, 2 deletions, with no whitespace errors.
+
+### Tool: `functions.exec_command`
+- Command: `git commit -m "Add peer exposure matrix to audit UI"`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created commit `cfc0fb3` with 5 files changed, 639 insertions, 2 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git push`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Pushed branch `codex/ui-ux-10x-20260607` from `41438fe` to `cfc0fb3`.
