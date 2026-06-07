@@ -1367,3 +1367,13 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `rg -n "data-pubkey|undefined bytes|ask chunk/byte|Preview upgrade|Inspect peer" share_audit_server.py docs/share-audit-ui.md test_share_audit_server.py test_share_audit_ui_browser.py`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 1. Confirmed no stale pubkey data attributes or old wording remained.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check && git add docs/share-audit-ui.md logs/codex_iteration_log.md share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py && git status --short --branch && git diff --cached --stat && git diff --cached --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged row-action iteration; staged diff had 5 files changed, 287 insertions, 5 deletions, with no whitespace errors.
+
+### Tool: `functions.exec_command`
+- Command: `git commit -m "Add matrix row actions to audit UI" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created commit `32b1e48`, pushed branch from `fde650a` to `32b1e48`, and confirmed clean tracking status.
