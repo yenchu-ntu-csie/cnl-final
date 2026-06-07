@@ -46,8 +46,11 @@ The matrix shows:
 - `Entries`: visible listing count only, not paths.
 - `Ask chunks`: aggregate text chunk count available to `ask`/`capability`.
 - `Append zones`: appendable zone names.
+- `Actions`: jump from a row into that peer's audit or trust-change preview.
 
 Use the matrix to spot broad trust posture before drilling into one peer. Rows at `personal` tier are highlighted because those peers can see `share/personal/`.
+
+`Inspect` selects that peer, switches the dashboard to peer mode, and runs the audit. `Preview` selects that peer, keeps the next-tier proposal, and opens the trust-change preview.
 
 Notes:
 
@@ -63,6 +66,7 @@ Notes:
 - `Ask chunks`: number and byte size of text chunks available to `ask`/`capability`.
 - `Appendable zones`: zones where the peer can write new content.
 - `Peer Exposure Matrix`: every configured peer side by side with aggregate exposure counts.
+- `Inspect` / `Preview`: row actions that turn the matrix into the selected peer's detailed audit flow.
 - `Risk Notes`: content-free reminders about hidden zones, append surface, and symlink guards.
 - `Raw audit JSON`: same content-free result for debugging or report capture.
 

@@ -179,6 +179,8 @@ def test_html_is_safe_and_browser_testable():
             assert 'share&quot; autofocus onfocus=&quot;alert(1)' in body, body
             assert 'value="share" autofocus' not in body, body
             assert 'data-testid="run-audit"' in body, body
+            assert 'data-matrix-action="inspect"' in body, body
+            assert 'data-matrix-action="preview"' in body, body
             assert "new URLSearchParams(window.location.search)" in body, body
         print("✅ audit UI HTML escapes defaults and exposes stable browser hooks")
     finally:

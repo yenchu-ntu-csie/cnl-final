@@ -222,6 +222,8 @@ def _page_state(cdp):
     return cdp.eval(
         """(() => ({
           status: document.querySelector('#status')?.textContent,
+          mode: document.querySelector('#mode')?.value,
+          selectedPeer: document.querySelector('#peer')?.selectedOptions?.[0]?.textContent || '',
           tier: document.querySelector('#tierBadge')?.textContent,
           visibleZones: document.querySelector('#visibleZones')?.textContent,
           entries: document.querySelector('#entryCount')?.textContent,
@@ -302,6 +304,24 @@ def main():
         desktop_png = os.path.join(work, "share-audit-desktop.png")
         _screenshot(cdp, desktop_png)
 
+        cdp.eval("document.querySelector('[data-matrix-action=\"inspect\"][data-row-index=\"0\"]').click();")
+        _wait_status(cdp, "Peer audit complete")
+        inspected = _page_state(cdp)
+        assert inspected["mode"] == "peer", inspected
+        assert inspected["selectedPeer"].startswith("Carol"), inspected
+        assert inspected["tier"] == "tier: task", inspected
+        assert inspected["hasTask"] is True, inspected
+        assert inspected["hasPersonalPath"] is False, inspected
+        assert inspected["hasSecretContent"] is False, inspected
+
+        cdp.eval("document.querySelector('[data-matrix-action=\"preview\"][data-row-index=\"0\"]').click();")
+        _wait_status(cdp, "Preview ready")
+        action_preview = _page_state(cdp)
+        assert action_preview["mode"] == "peer", action_preview
+        assert action_preview["selectedPeer"].startswith("Carol"), action_preview
+        assert action_preview["previewTier"] == "task → personal", action_preview
+        assert action_preview["previewHasPersonal"] is True, action_preview
+
         cdp.eval("document.querySelector('#mode').value = 'peer'; document.querySelector('#mode').dispatchEvent(new Event('change')); document.querySelector('#loadPeers').click();")
         deadline = time.time() + 8
         while time.time() < deadline:
@@ -338,6 +358,8 @@ def main():
 
         print("✅ browser common tier hides task/personal")
         print("✅ browser task tier reveals task but not personal")
+        print("✅ browser matrix inspect action selects a peer and runs audit")
+        print("✅ browser matrix preview action opens the trust-change preview")
         print("✅ browser peer flow loads Carol from agents.json")
         print("✅ browser peer matrix lists all peers and highlights personal tier")
         print("✅ browser trust preview shows newly exposed personal paths without contents")

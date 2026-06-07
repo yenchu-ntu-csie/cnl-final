@@ -348,6 +348,32 @@ APP_HTML = """<!doctype html>
       flex-wrap: wrap;
       gap: 4px;
     }
+    .mini-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .mini-button {
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #34404b;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    .mini-button.primary-mini {
+      border-color: #b8d7ee;
+      background: #e8f3fb;
+      color: #0f4c81;
+    }
+    .mini-button:disabled {
+      cursor: wait;
+      opacity: 0.68;
+    }
     .preview-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -593,10 +619,11 @@ APP_HTML = """<!doctype html>
                   <th>Entries</th>
                   <th>Ask chunks</th>
                   <th>Append zones</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="matrixRows">
-                <tr><td colspan="6" class="muted">Load peers or run an audit to populate the matrix.</td></tr>
+                <tr><td colspan="7" class="muted">Load peers or run an audit to populate the matrix.</td></tr>
               </tbody>
             </table>
           </div>
@@ -677,6 +704,7 @@ APP_HTML = """<!doctype html>
     };
     let selectedTier = "common";
     let peerTiers = {};
+    let matrixRows = [];
 
     function setStatus(text) { els.status.textContent = text; }
     function showError(text) {
@@ -709,6 +737,9 @@ APP_HTML = """<!doctype html>
       els.runAudit.disabled = isBusy;
       els.loadPeers.disabled = isBusy;
       els.loadMatrix.disabled = isBusy;
+      document.querySelectorAll("[data-matrix-action]").forEach(button => {
+        button.disabled = isBusy;
+      });
     }
     function selectTier(tier) {
       const allowed = ["common", "task", "personal"];
@@ -853,13 +884,14 @@ APP_HTML = """<!doctype html>
     }
     function renderMatrix(data) {
       const rows = data.matrix || [];
+      matrixRows = rows;
       els.matrixState.textContent = `${rows.length} peers`;
       els.matrixState.className = `badge ${rows.some(row => row.tier === "personal") ? "warn" : "ok"}`;
       if (!rows.length) {
-        els.matrixRows.innerHTML = `<tr><td colspan="6" class="muted">No peers in agents file</td></tr>`;
+        els.matrixRows.innerHTML = `<tr><td colspan="7" class="muted">No peers in agents file</td></tr>`;
         return;
       }
-      els.matrixRows.innerHTML = rows.map(row => {
+      els.matrixRows.innerHTML = rows.map((row, index) => {
         const zones = row.visible_zones.map(zone => `<span class="badge ${zone === "personal" ? "warn" : "info"}">${htmlEscape(zone)}</span>`).join("");
         const append = row.append_zones.length ? row.append_zones.map(zone => `<span class="badge warn">${htmlEscape(zone)}</span>`).join("") : `<span class="badge info">none</span>`;
         const label = row.name || row.pubkey.slice(0, 12);
@@ -871,6 +903,12 @@ APP_HTML = """<!doctype html>
             <td data-label="Entries">${row.entry_count}</td>
             <td data-label="Ask chunks">${row.ask_context.chunks}</td>
             <td data-label="Append zones"><div class="zone-pills">${append}</div></td>
+            <td data-label="Actions">
+              <div class="mini-actions">
+                <button class="mini-button primary-mini" type="button" data-matrix-action="inspect" data-row-index="${index}">Inspect</button>
+                <button class="mini-button" type="button" data-matrix-action="preview" data-row-index="${index}">Preview</button>
+              </div>
+            </td>
           </tr>
         `;
       }).join("");
@@ -894,7 +932,7 @@ APP_HTML = """<!doctype html>
       });
       renderPreview(preview);
     }
-    async function runAudit() {
+    async function runAudit(options = {}) {
       showError("");
       setStatus("Auditing");
       setBusy(true);
@@ -908,7 +946,11 @@ APP_HTML = """<!doctype html>
       try {
         const data = await apiGet("/api/audit", query);
         renderAudit(data);
-        await runPreview();
+        if (options.skipPreview) {
+          els.previewPanel.hidden = true;
+        } else {
+          await runPreview();
+        }
         await loadMatrix();
         setStatus("Audit complete");
       } catch (err) {
@@ -945,6 +987,36 @@ APP_HTML = """<!doctype html>
           setStatus("Matrix failed");
         })
         .finally(() => setBusy(false));
+    });
+    async function runMatrixAction(pubkey, action) {
+      showError("");
+      setStatus(action === "preview" ? "Previewing peer" : "Inspecting peer");
+      setBusy(true);
+      try {
+        els.mode.value = "peer";
+        setMode();
+        if (!peerTiers[pubkey]) await loadPeers();
+        els.peer.value = pubkey;
+        updateProposedTier();
+        await runAudit({ skipPreview: action === "inspect" });
+        const target = action === "preview"
+          ? els.previewPanel
+          : document.querySelector("#fileList").closest(".panel");
+        if (target) target.scrollIntoView({ block: "start" });
+        setStatus(action === "preview" ? "Preview ready" : "Peer audit complete");
+      } catch (err) {
+        showError(err.message);
+        setStatus("Matrix action failed");
+      } finally {
+        setBusy(false);
+      }
+    }
+    els.matrixRows.addEventListener("click", event => {
+      const button = event.target.closest("[data-matrix-action]");
+      if (!button) return;
+      const row = matrixRows[Number(button.dataset.rowIndex)];
+      if (!row) return;
+      runMatrixAction(row.pubkey, button.dataset.matrixAction);
     });
     els.runAudit.addEventListener("click", runAudit);
     async function init() {

@@ -1185,3 +1185,185 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git push`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Pushed branch `codex/ui-ux-10x-20260607` from `41438fe` to `cfc0fb3`.
+
+### Tool: `functions.exec_command`
+- Command: `git add logs/codex_iteration_log.md && git commit -m "Log peer matrix iteration" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created log-only commit `fde650a`, pushed branch from `cfc0fb3` to `fde650a`, and confirmed clean tracking status.
+
+## 2026-06-07 UI/UX Iteration 4 - Matrix Row Actions
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Harvey `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: queued docs/understanding task for matrix row-level actions docs and code-truth wording.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: queued implementation/cross-check task for row action safety, event delegation, XSS/data attrs, busy state, and browser coverage.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Added matrix row action buttons, action CSS, an Actions column, event delegation, and `runMatrixAction` to select peers and run audit/preview flows.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Added browser state fields and real Chrome assertions for matrix `Inspect`.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Added real Chrome assertions for matrix `Preview`.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`, `test_share_audit_server.py`
+- Result: exit 0. Documented matrix actions and added HTML hook assertions for inspect/preview buttons.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed after initial row-action implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API/HTML tests passed after adding row-action hooks.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. CLI exposure-audit tests passed after row-action implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Security tests passed after row-action implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. Browser test caught a product bug: `Inspect` selected Carol and ran audit, but peer-mode `runAudit()` also auto-rendered trust preview, causing `personal/diary.md` to appear on the page.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Added `runAudit({ skipPreview: true })` support and changed `Inspect` to audit-only while keeping `Preview` as trust-preview flow.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Browser test passed with real clicks for Inspect and Preview; screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_7fkohsj7/`.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final row-action syntax check passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final row-action API/HTML tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final row-action CLI exposure-audit tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Final row-action security tests passed.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_7fkohsj7/share-audit-matrix.png`
+- Result: visually inspected final matrix screenshot; Actions column is readable on desktop.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_7fkohsj7/share-audit-mobile.png`
+- Result: visually inspected final mobile screenshot; row actions are readable and not clipped.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_7fkohsj7/share-audit-preview.png`
+- Result: visually inspected final preview screenshot; Preview action leads to trust-change preview without content.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_7fkohsj7/share-audit-desktop.png`
+- Result: visually inspected final desktop screenshot; matrix actions coexist with listing and risk panels cleanly.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Targets: Harvey `019ea14d-5b44-7733-a597-6e630778810b`, Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: both completed. Docs subagent response was stale/read-only and described pre-action code. Implementation subagent recommended existing APIs only, index-based row action lookup, event delegation, busy-state disabling, and browser tests for Inspect/Preview.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Reworked row actions to use `data-row-index` with JS `matrixRows` storage instead of pubkey attributes, and disabled matrix action buttons during busy state.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Updated browser selectors from pubkey data attrs to row-index selectors.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed after index-based row-action refactor.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API/HTML tests passed after index-based row-action refactor.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. CLI exposure-audit tests passed after index-based row-action refactor.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Security tests passed after index-based row-action refactor.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Real Chrome UI test passed after index-based row-action refactor; screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_u24qyz2x/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_u24qyz2x/share-audit-matrix.png`
+- Result: visually inspected final row-action matrix screenshot; action buttons are readable on desktop.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_u24qyz2x/share-audit-mobile.png`
+- Result: visually inspected final row-action mobile screenshot; action buttons are readable in stacked matrix cards.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: queued final blocker-only implementation/security cross-check after index-based row-action implementation.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Harvey `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: queued final blocker-only docs/code-truth cross-check after row-action implementation.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Targets: Harvey `019ea14d-5b44-7733-a597-6e630778810b`, Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: implementation subagent completed with no blockers; docs subagent had not yet returned in this first wait.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Target: Harvey `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: docs subagent completed with no blockers; docs match current UI labels and behavior for `Actions`, `Inspect`, and `Preview`.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors before staging row-action iteration.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Pre-stage row-action diff: 5 files changed, 267 insertions, 5 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Modified docs, log, server, API test, and browser UI test on `codex/ui-ux-10x-20260607`.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "data-pubkey|undefined bytes|ask chunk/byte|Preview upgrade|Inspect peer" share_audit_server.py docs/share-audit-ui.md test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. Confirmed no stale pubkey data attributes or old wording remained.
