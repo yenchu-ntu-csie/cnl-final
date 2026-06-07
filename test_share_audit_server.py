@@ -163,6 +163,32 @@ def test_api_serves_peer_matrix_without_contents_or_paths():
         server.server_close()
 
 
+def test_api_serves_local_self_audit_without_contents():
+    _, share, agents_file, _ = _seed()
+    server = share_audit_server.make_server("127.0.0.1", 0, share, agents_file)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        self_audit = _get_json(base, "/api/self", share=share, agents_file=agents_file)
+        rendered = json.dumps(self_audit, ensure_ascii=False)
+        by_zone = {zone["zone"]: zone for zone in self_audit["zones"]}
+        assert self_audit["ok"] is True, self_audit
+        assert self_audit["local_only"] is True, self_audit
+        assert self_audit["host_label"] == "this computer", self_audit
+        assert self_audit["friend_count"] == 1, self_audit
+        assert by_zone["read-only"]["file_count"] == 1, by_zone
+        assert by_zone["task"]["file_count"] == 1, by_zone
+        assert by_zone["personal"]["file_count"] == 1, by_zone
+        assert "SECRET gamma" not in rendered, rendered
+        assert "TASK beta" not in rendered, rendered
+        assert "PUBLIC alpha" not in rendered, rendered
+        print("✅ audit UI API serves local self-audit without file contents")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_html_is_safe_and_browser_testable():
     _, _, agents_file, _ = _seed()
     unsafe_share = 'share" autofocus onfocus="alert(1)'
@@ -178,6 +204,7 @@ def test_html_is_safe_and_browser_testable():
             assert res.headers.get("X-Content-Type-Options") == "nosniff"
             assert 'share&quot; autofocus onfocus=&quot;alert(1)' in body, body
             assert 'value="share" autofocus' not in body, body
+            assert 'data-testid="self-audit-panel"' in body, body
             assert 'data-testid="run-audit"' in body, body
             assert 'data-matrix-action="inspect"' in body, body
             assert 'data-matrix-action="preview"' in body, body
@@ -213,6 +240,7 @@ if __name__ == "__main__":
     test_api_rejects_missing_subject()
     test_api_previews_trust_change_without_contents()
     test_api_serves_peer_matrix_without_contents_or_paths()
+    test_api_serves_local_self_audit_without_contents()
     test_html_is_safe_and_browser_testable()
     test_rejects_dns_rebinding_host_header()
     print("\n🎉 share-audit web API tests passed")

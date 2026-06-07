@@ -1,12 +1,23 @@
 # Share Audit UI
 
-Use this local dashboard before starting a node, changing a peer's tier, or demoing tiered disclosure.
+Use this local dashboard on each person's own computer before starting a node, changing a peer's tier, importing files, or demoing tiered disclosure.
 
 ```bash
 python3 share_audit_server.py --share share --agents-file agents.json
 ```
 
-Open the printed `http://127.0.0.1:...` URL. The server is local by default and the UI/API return paths and counts only, never file contents.
+Open the printed `http://127.0.0.1:...` URL. The server is local by default and the UI/API return paths and counts only, never file contents. It is meant to run beside Bob's own `share/` and `agents.json`, not as a central audit service.
+
+## This Computer Self-Audit
+
+The first panel describes the local node view:
+
+- `Audit runs on`: confirms the audit is for this computer.
+- `Friends in agents.json`: counts trusted peers from the local `agents.json`.
+- `Share directory`: shows the local share path being audited.
+- Import zones: shows where to place files for `read-only`, `read&append`, `task`, and `personal`, plus file/folder counts.
+
+Importing data is currently filesystem-based: put files into the intended local zone, then run the audit again to see which peers or tiers can see that zone.
 
 ## Explicit Tier Flow
 

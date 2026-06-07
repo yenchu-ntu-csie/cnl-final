@@ -229,6 +229,10 @@ def _page_state(cdp):
           entries: document.querySelector('#entryCount')?.textContent,
           chunks: document.querySelector('#chunkCount')?.textContent,
           appendable: document.querySelector('#appendZones')?.textContent,
+          selfPanelText: document.querySelector('[data-testid="self-audit-panel"]')?.innerText || '',
+          selfHost: document.querySelector('#selfHost')?.textContent,
+          selfFriendCount: document.querySelector('#selfFriendCount')?.textContent,
+          importZoneCount: document.querySelectorAll('#importZones .import-zone').length,
           hasProfile: document.body.innerText.includes('read-only/profile.md'),
           hasTask: document.body.innerText.includes('task/demo.md'),
           hasPersonalPath: document.body.innerText.includes('personal/diary.md'),
@@ -279,6 +283,14 @@ def main():
         _wait_status(cdp)
 
         common = _page_state(cdp)
+        assert common["selfHost"] == "this computer", common
+        assert common["selfFriendCount"] == "2", common
+        assert common["importZoneCount"] == 4, common
+        assert "local-only" in common["selfPanelText"], common
+        assert "read-only/" in common["selfPanelText"], common
+        assert "personal/" in common["selfPanelText"], common
+        self_png = os.path.join(work, "share-audit-self.png")
+        _screenshot(cdp, self_png)
         assert common["visibleZones"] == "2", common
         assert common["hasProfile"] is True, common
         assert common["hasTask"] is False, common
@@ -384,6 +396,7 @@ def main():
         print("✅ browser peer matrix lists all peers and highlights personal tier")
         print("✅ browser trust preview shows newly exposed personal paths without contents")
         print("✅ mobile viewport has no horizontal overflow")
+        print(f"SELF_SCREENSHOT={self_png}")
         print(f"MATRIX_SCREENSHOT={matrix_png}")
         print(f"DESKTOP_SCREENSHOT={desktop_png}")
         print(f"PREVIEW_SCREENSHOT={preview_png}")

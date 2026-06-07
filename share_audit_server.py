@@ -16,6 +16,7 @@ from typing import Dict, Tuple
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit
 
 import agents
+import app_layer
 import share_audit
 
 
@@ -209,6 +210,51 @@ APP_HTML = """<!doctype html>
       display: grid;
       gap: 16px;
       min-width: 0;
+    }
+    .self-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .self-card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      background: #ffffff;
+      min-width: 0;
+    }
+    .self-card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .self-card .value {
+      margin-top: 5px;
+      font-size: 18px;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+    .import-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .import-zone {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fafbfc;
+      min-width: 0;
+    }
+    .import-zone strong {
+      display: block;
+      margin-bottom: 5px;
+      overflow-wrap: anywhere;
+    }
+    .import-zone code {
+      font-size: 12px;
+      overflow-wrap: anywhere;
     }
     .summary {
       display: grid;
@@ -439,6 +485,8 @@ APP_HTML = """<!doctype html>
       main { grid-template-columns: 1fr; }
       .controls { position: static; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .self-grid { grid-template-columns: 1fr; }
+      .import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid2 { grid-template-columns: 1fr; }
       .preview-grid { grid-template-columns: 1fr; }
     }
@@ -446,6 +494,7 @@ APP_HTML = """<!doctype html>
       header { align-items: flex-start; flex-direction: column; }
       main { padding: 10px; }
       .summary { grid-template-columns: 1fr; }
+      .import-grid { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
       .metric .value { font-size: 22px; }
       .segmented button {
@@ -554,6 +603,30 @@ APP_HTML = """<!doctype html>
       </aside>
       <section class="workspace">
         <div class="panel error" id="error"></div>
+        <section class="panel" data-testid="self-audit-panel">
+          <div class="panel-head">
+            <h2>This Computer Self-Audit</h2>
+            <span class="badge ok">local-only</span>
+          </div>
+          <div class="panel-body">
+            <div class="self-grid">
+              <div class="self-card">
+                <div class="label">Audit runs on</div>
+                <div class="value" id="selfHost">this computer</div>
+              </div>
+              <div class="self-card">
+                <div class="label">Friends in agents.json</div>
+                <div class="value" id="selfFriendCount">0</div>
+              </div>
+              <div class="self-card">
+                <div class="label">Share directory</div>
+                <div class="value" id="selfShare">-</div>
+              </div>
+            </div>
+            <div class="muted" style="margin-top: 10px;">Import data by placing files into the local share zones below. The audit stays on this machine and reports paths/counts only.</div>
+            <div class="import-grid" id="importZones"></div>
+          </div>
+        </section>
         <section class="summary">
           <div class="panel metric" data-testid="visible-zones-card">
             <div class="label">Visible zones</div>
@@ -707,6 +780,10 @@ APP_HTML = """<!doctype html>
       previewAskDelta: document.getElementById("previewAskDelta"),
       previewBytes: document.getElementById("previewBytes"),
       previewList: document.getElementById("previewList"),
+      selfHost: document.getElementById("selfHost"),
+      selfFriendCount: document.getElementById("selfFriendCount"),
+      selfShare: document.getElementById("selfShare"),
+      importZones: document.getElementById("importZones"),
       matrixState: document.getElementById("matrixState"),
       matrixRows: document.getElementById("matrixRows"),
       runAudit: document.getElementById("runAudit"),
@@ -812,6 +889,26 @@ APP_HTML = """<!doctype html>
         showError(err.message);
         setStatus("Peer load failed");
       }
+    }
+    function renderSelf(data) {
+      els.selfHost.textContent = data.host_label;
+      els.selfFriendCount.textContent = data.friend_count;
+      els.selfShare.textContent = data.share;
+      els.importZones.innerHTML = data.zones.map(zone => `
+        <div class="import-zone">
+          <strong>${htmlEscape(zone.zone)}/</strong>
+          <div class="muted">${htmlEscape(zone.visibility)}</div>
+          <div>${zone.file_count} files, ${zone.dir_count} folders</div>
+          <code>${htmlEscape(zone.import_label)}</code>
+        </div>
+      `).join("");
+    }
+    async function loadSelf() {
+      const data = await apiGet("/api/self", {
+        share: els.share.value,
+        agents_file: els.agentsFile.value
+      });
+      renderSelf(data);
     }
     function renderAudit(data) {
       const audit = data.audit;
@@ -977,6 +1074,7 @@ APP_HTML = """<!doctype html>
       if (els.mode.value === "peer") query.peer_pubkey = els.peer.value;
       else query.tier = selectedTier;
       try {
+        await loadSelf();
         const data = await apiGet("/api/audit", query);
         renderAudit(data);
         if (options.skipPreview) {
@@ -1166,6 +1264,51 @@ def _audit_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
     return 200, {"ok": True, "peer": peer, "audit": audit}
 
 
+def _zone_counts(path: str) -> Tuple[int, int]:
+    files = 0
+    dirs = 0
+    if not os.path.isdir(path):
+        return files, dirs
+    for _, dirnames, filenames in os.walk(path, followlinks=False):
+        dirs += len(dirnames)
+        files += len(filenames)
+    return files, dirs
+
+
+def _self_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
+    share = _first(qs, "share", "share")
+    agents_file = _first(qs, "agents_file", agents.DEFAULT_PATH)
+    share_root = os.path.realpath(share)
+    loaded = agents.load(agents_file)
+    zones = []
+    for zone in app_layer.ALL_ZONES:
+        zone_path = os.path.join(share_root, zone)
+        file_count, dir_count = _zone_counts(zone_path)
+        required = app_layer.ZONE_MIN_TIER[zone]
+        if zone == app_layer.ZONE_APPEND:
+            visibility = "common peers can read and append"
+        else:
+            visibility = f"{required}+ peers can read"
+        zones.append({
+            "zone": zone,
+            "required_tier": required,
+            "visibility": visibility,
+            "import_path": os.path.join(share_root, zone),
+            "import_label": f"share/{zone}",
+            "file_count": file_count,
+            "dir_count": dir_count,
+        })
+    return 200, {
+        "ok": True,
+        "host_label": "this computer",
+        "local_only": True,
+        "share": share_root,
+        "agents_file": os.path.realpath(agents_file),
+        "friend_count": len(loaded),
+        "zones": zones,
+    }
+
+
 def _entry_key(entry: Dict) -> Tuple[str, str]:
     return entry.get("path", ""), entry.get("kind", "")
 
@@ -1309,6 +1452,14 @@ class AuditHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/agents":
             agents_file = _first(qs, "agents_file", self.default_agents_file)
             _json_response(self, 200, _agent_payload(agents_file))
+            return
+        if parsed.path == "/api/self":
+            if "share" not in qs:
+                qs["share"] = [self.default_share]
+            if "agents_file" not in qs:
+                qs["agents_file"] = [self.default_agents_file]
+            status, payload = _self_payload(qs)
+            _json_response(self, status, payload)
             return
         if parsed.path == "/api/audit":
             if "share" not in qs:
