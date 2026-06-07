@@ -19,6 +19,7 @@
 | `ai_client.py` | AI | 本地 Ollama HTTP 包裝；含 `answer` / `synthesize` / `formulate` / `next_step` / `summarize` / `capability_probe` / `plan_question` / `group_summarize`（嚴格 prompt 分隔） |
 | `agents.py` | 白名單 | 管理 `agents.json`（agent list + per-peer tier） |
 | `share_audit.py` | 稽核工具 | 離線檢查某個 peer/tier 能 list/read/ask 到哪些 `share/` 路徑與 context 統計（不印內容） |
+| `share_audit_server.py` | 本機 UI | 瀏覽器 dashboard：選 peer/tier、看 zone 權限、可見檔案、ask 暴露量與風險摘要 |
 | `script/run_A.sh` `run_B.sh` | 便利腳本 | 一鍵跑收訊方 / 送訊方 |
 | `setup.md` | 文件 | 環境準備、兩台機器部署 |
 
@@ -61,9 +62,12 @@ python3 agents.py remove <對方公鑰>
 ```bash
 python3 share_audit.py --peer-pubkey <peer-pubkey>
 python3 share_audit.py --tier task --share share --json
+python3 share_audit_server.py --share share --agents-file agents.json
 ```
 
 稽核只顯示路徑、zone 權限與 `ask` context 的 chunk/byte 統計，不列印檔案內容。
+Web UI 預設只綁在 `127.0.0.1`，給本機操作使用。
+完整 UI 操作流程見 `docs/share-audit-ui.md`。
 
 ### 2.4 路徑安全
 `_check` 解析後若不在 `share/` 內 → `path_denied`（擋 `../`、絕對路徑、symlink 逃逸）。

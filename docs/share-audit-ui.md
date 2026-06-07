@@ -1,0 +1,52 @@
+# Share Audit UI
+
+Use this local dashboard before starting a node, changing a peer's tier, or demoing tiered disclosure.
+
+```bash
+python3 share_audit_server.py --share share --agents-file agents.json
+```
+
+Open the printed `http://127.0.0.1:...` URL. The server is local by default and the UI/API return paths and counts only, never file contents.
+
+## Explicit Tier Flow
+
+1. Keep `Target source` set to `Explicit tier`.
+2. Choose `common`, `task`, or `personal`.
+3. Optionally set `Path filter` to a share-relative path such as `read-only` or `task`.
+4. Click `Run audit`.
+
+Use this to preview what a generic peer at a tier could list and feed into `ask`.
+
+## Peer Flow
+
+1. Set `Target source` to `Peer from agents file`.
+2. Click `Load peers`.
+3. Select a peer from `agents.json`.
+4. Click `Run audit`.
+
+Use this before raising a real peer from `common` to `task` or `personal`.
+
+## How To Read The Screen
+
+- `Visible zones`: zones this peer/tier can list, read, and include in `ask` context.
+- `Visible entries`: visible directories and files after tier filtering and optional path filtering.
+- `Ask chunks`: number and byte size of text chunks available to `ask`/`capability`.
+- `Appendable zones`: zones where the peer can write new content.
+- `Risk Notes`: content-free reminders about hidden zones, append surface, and symlink guards.
+- `Raw audit JSON`: same content-free result for debugging or report capture.
+
+## Trust Checklist
+
+Before increasing trust, verify:
+
+- No unexpected `personal/` paths appear.
+- The append surface is acceptable.
+- `Ask chunks` and bytes are roughly what you expect.
+- The raw JSON contains paths and counts only, not note contents.
+
+## Troubleshooting
+
+- Empty peer list usually means the wrong `agents.json` path.
+- `missing tier/peer` means no explicit tier was selected and no peer was provided.
+- Empty listing can be valid if the path filter points to a hidden zone or an empty directory.
+- If the default port is busy, pass another port, for example `--port 8766`.

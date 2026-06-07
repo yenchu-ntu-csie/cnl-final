@@ -364,3 +364,236 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git push -u origin codex/product-iteration-20260607`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Pushed new branch `codex/product-iteration-20260607` to `origin` and set upstream tracking. GitHub PR URL: `https://github.com/yenchu-ntu-csie/cnl-final/pull/new/codex/product-iteration-20260607`.
+
+## 2026-06-07 - UI/UX Long-Run Bootstrap
+
+### Tool: `multi_agent_v1.spawn_agent`
+- Agent: `Harvey` (`019ea14d-5b44-7733-a597-6e630778810b`)
+- Task: ongoing read-only code-understanding/docs subagent focused on UI/UX productization, usage docs, and next high-value UX iterations.
+- Result: agent spawned.
+
+### Tool: `multi_agent_v1.spawn_agent`
+- Agent: `Chandrasekhar` (`019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`)
+- Task: ongoing implementation subagent focused on bounded UX/API/security improvements for the local share exposure audit dashboard.
+- Result: agent spawned.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. This command ran in parallel with branch creation and showed the pre-switch branch `codex/product-iteration-20260607` plus UI files already being edited/untracked.
+
+### Tool: `functions.exec_command`
+- Command: `git switch -c codex/ui-ux-10x-20260607`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created and switched to branch `codex/ui-ux-10x-20260607`.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '1,120p' logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed existing append-only log before appending this UI/UX run.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`, `test_share_audit_server.py`, `README.md`, `setup.md`
+- Result: added local audit dashboard server/UI and API tests; README/setup mention the web UI. The UI reuses `share_audit.py`, binds to localhost by default, and reports content-free paths/counts.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Initial web API tests passed for peer audit and missing-subject rejection.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No syntax errors.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. On `codex/ui-ux-10x-20260607`; modified `README.md`, `setup.md`; untracked `share_audit_server.py`, `test_share_audit_server.py`.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Tracked diff showed README/setup docs changes; untracked UI files were not included.
+
+### Tool: `functions.exec_command`
+- Command: `.venv/bin/python - <<'PY' ...`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created temporary UI fixture under `/var/folders/.../linkedout_ui_h97q6jo5` with `read-only`, `read&append`, `task`, and `personal` files plus a task-tier Carol in `agents.json`.
+
+### Tool: `functions.exec_command`
+- Command: `.venv/bin/python -B share_audit_server.py --port 8765 --share <fixture>/share --agents-file <fixture>/agents.json`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. Port 8765 was already in use.
+
+### Tool: `functions.exec_command`
+- Command: `.venv/bin/python -B share_audit_server.py --port 8766 --share <fixture>/share --agents-file <fixture>/agents.json`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: long-running session `80611`; dashboard served at `http://127.0.0.1:8766/`.
+
+### Tool: `mcp__node_repl.js`
+- Title: `Open audit dashboard`
+- Result: failed because in-app Browser backend `iab` was unavailable.
+
+### Tool: `mcp__node_repl.js`
+- Title: `Check Playwright fallback`
+- Result: Playwright package unavailable in the Node runtime.
+
+### Tool: `functions.exec_command`
+- Command: `cat /Users/user0/.codex/plugins/cache/openai-bundled/computer-use/1.0.799/skills/computer-use/SKILL.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Read Computer Use skill instructions before attempting desktop browser fallback.
+
+### Tool: `mcp__computer_use.list_apps`
+- Result: timed out after 120s; desktop UI control unavailable for this run.
+
+### Tool: `functions.exec_command`
+- Command: `ls /Applications`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed `Google Chrome.app` is installed.
+
+### Tool: `functions.exec_command`
+- Command: `which google-chrome`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. No `google-chrome` CLI shim.
+
+### Tool: `functions.exec_command`
+- Command: `which chromium`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. No `chromium` CLI shim.
+
+### Tool: `functions.exec_command`
+- Command: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless=new --remote-debugging-port=9223 ...`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 127 because the application path contained spaces and was not quoted.
+
+### Tool: `functions.exec_command`
+- Command: `'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --remote-debugging-port=9223 --user-data-dir=/tmp/linkedout-chrome-profile-9223 --disable-gpu --no-first-run about:blank`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: long-running session `66227`; Chrome DevTools listening on `127.0.0.1:9223`.
+
+### Tool: `mcp__node_repl.js`
+- Title: `CDP UI interaction test`
+- Result: failed because `WebSocket` was not defined in the Node runtime.
+
+### External tool result: `Harvey` subagent notification
+- Result: read-only docs pass. It supported the dashboard direction, identified docs gaps, and recommended browser screenshot tests, trust-change preview mode, and a Scenario D demo cockpit as next UX iterations.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "data-testid|Content-Security|Host|URLSearchParams|location.search|DEFAULT_SHARE|send_header|do_GET" share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed UI hooks, query hydration, security headers, and Host guard were present in current server code.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '1,220p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed top of dashboard server, imports, HTML/CSS layout, and responsive containment.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '220,520p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed dashboard controls, summary cards, zone/risk/list panels, and UI structure.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '520,820p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed client-side JS, URL query hydration, busy state, rendering logic, security headers, Host guard, API handlers.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '820,920p' share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed `make_server()` host allow-list and CLI entrypoint.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: added a dependency-free real Chrome smoke test. It starts a dashboard server and headless Google Chrome, speaks Chrome DevTools Protocol over a minimal WebSocket client, clicks tier and peer flows, checks DOM state, verifies personal content is absent, checks mobile horizontal overflow, and saves desktop/mobile screenshots.
+
+### External tool result: `Chandrasekhar` subagent notification
+- Result: implementation pass reported existing/current changes to mobile overflow control, `data-testid` hooks, busy state, query hydration, security headers, Host guard, and stronger server tests. It also reported successful headless Chrome screenshot and mobile layout checks in its workspace.
+
+### Tool: `functions.write_stdin`
+- Target session: `80611`
+- Input: Ctrl-C
+- Result: dashboard session stopped cleanly after serving `/`, `/api/audit`, and `favicon.ico` requests.
+
+### Tool: `functions.write_stdin`
+- Target session: `66227`
+- Input: Ctrl-C
+- Result: headless Chrome session stopped.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Passed API tests, HTML escaping/browser hooks test, security header checks, and non-local Host rejection.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Passed CLI audit tests.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No syntax errors.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Real Chrome browser test passed: common tier hid task/personal, task tier revealed task but not personal, peer flow loaded Carol from `agents.json`, mobile viewport had no horizontal overflow. Screenshots written to `/var/folders/.../share-audit-desktop.png` and `/var/folders/.../share-audit-mobile.png`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_f1837vu9/share-audit-desktop.png`
+- Result: visually inspected desktop screenshot. Dashboard rendered with control panel, summary cards, zone table, risk notes, and visible listing.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_f1837vu9/share-audit-mobile.png`
+- Result: visually inspected mobile screenshot. Layout stacked correctly with no horizontal overflow; long local paths stayed inside inputs.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. On `codex/ui-ux-10x-20260607`; modified `README.md`, `logs/codex_iteration_log.md`, `setup.md`; untracked `share_audit_server.py`, `test_share_audit_server.py`, `test_share_audit_ui_browser.py`.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Tracked diff showed README/setup/log changes only; untracked UI files were not included by this command.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors in tracked diff.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Existing security regression suite still passed.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`, `README.md`, `setup.md`
+- Result: added dedicated UI usage docs covering explicit-tier flow, peer flow, metric interpretation, trust checklist, and troubleshooting; linked it from README/setup.
+
+### Tool: `functions.exec_command`
+- Command: `git add README.md setup.md docs/share-audit-ui.md share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged UI baseline files and append-only log.
+
+### Tool: `functions.exec_command`
+- Command: `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged modifications/additions for README, setup, UI docs, log, dashboard server, API tests, and real browser UI test.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --cached --stat`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged diff: 7 files changed, 1598 insertions.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --cached --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors in staged diff.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --cached --name-only`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Staged files: `README.md`, `docs/share-audit-ui.md`, `logs/codex_iteration_log.md`, `setup.md`, `share_audit_server.py`, `test_share_audit_server.py`, `test_share_audit_ui_browser.py`.

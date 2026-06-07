@@ -140,9 +140,12 @@ Before starting your node or raising a peer's tier, audit the exact content-free
 ```bash
 python3 share_audit.py --peer-pubkey <peer-pubkey>
 python3 share_audit.py --tier task --json
+python3 share_audit_server.py --share share --agents-file agents.json
 ```
 
 The audit shows visible paths, zone permissions, and how many text chunks/bytes `ask` could use. It never prints file contents.
+The web UI binds to `127.0.0.1` by default and is meant for local operator review before changing trust.
+See `docs/share-audit-ui.md` for the click-through workflow and trust checklist.
 
 Tiers (low → high): `common` < `task` < `personal`. A peer only ever sees zones at or below their tier — for `read`, `append`, `list`, **and** what the local AI is allowed to use as `ask` context. A `common` peer asking about your `personal/` files literally never has them in the model's context, so the AI cannot leak them (not just "refuses" — they're absent).
 
