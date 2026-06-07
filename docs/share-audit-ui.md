@@ -38,6 +38,8 @@ The `Trust Change Preview` panel shows the delta between the peer's current tier
 
 Click `Load matrix` to summarize every peer in `agents.json` at once. Each row uses the peer's normalized tier and the same content-free audit rules as the single-peer view.
 
+Use `All`, `Personal`, and `Appendable` to filter the current matrix view without changing the underlying audit.
+
 The matrix shows:
 
 - `Peer`: peer display name, falling back to the public-key prefix.

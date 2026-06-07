@@ -343,6 +343,12 @@ APP_HTML = """<!doctype html>
     .matrix-row-personal {
       background: #fff8ee;
     }
+    .matrix-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
     .zone-pills {
       display: flex;
       flex-wrap: wrap;
@@ -610,6 +616,11 @@ APP_HTML = """<!doctype html>
             <span class="badge info" id="matrixState">not loaded</span>
           </div>
           <div class="panel-body">
+            <div class="matrix-toolbar" role="group" aria-label="Peer matrix filter">
+              <button class="mini-button primary-mini" type="button" data-matrix-filter="all">All</button>
+              <button class="mini-button" type="button" data-matrix-filter="personal">Personal</button>
+              <button class="mini-button" type="button" data-matrix-filter="appendable">Appendable</button>
+            </div>
             <table class="matrix-table" aria-label="Peer exposure matrix">
               <thead>
                 <tr>
@@ -705,6 +716,8 @@ APP_HTML = """<!doctype html>
     let selectedTier = "common";
     let peerTiers = {};
     let matrixRows = [];
+    let visibleMatrixRows = [];
+    let matrixFilter = "all";
 
     function setStatus(text) { els.status.textContent = text; }
     function showError(text) {
@@ -738,6 +751,9 @@ APP_HTML = """<!doctype html>
       els.loadPeers.disabled = isBusy;
       els.loadMatrix.disabled = isBusy;
       document.querySelectorAll("[data-matrix-action]").forEach(button => {
+        button.disabled = isBusy;
+      });
+      document.querySelectorAll("[data-matrix-filter]").forEach(button => {
         button.disabled = isBusy;
       });
     }
@@ -883,12 +899,29 @@ APP_HTML = """<!doctype html>
       }
     }
     function renderMatrix(data) {
-      const rows = data.matrix || [];
-      matrixRows = rows;
-      els.matrixState.textContent = `${rows.length} peers`;
+      matrixRows = data.matrix || [];
+      renderMatrixRows();
+    }
+    function rowsForMatrixFilter() {
+      if (matrixFilter === "personal") return matrixRows.filter(row => row.personal_tier);
+      if (matrixFilter === "appendable") return matrixRows.filter(row => row.append_zone_count > 0);
+      return matrixRows;
+    }
+    function renderMatrixRows() {
+      const rows = rowsForMatrixFilter();
+      visibleMatrixRows = rows;
+      document.querySelectorAll("[data-matrix-filter]").forEach(button => {
+        button.classList.toggle("primary-mini", button.dataset.matrixFilter === matrixFilter);
+      });
+      const countText = matrixFilter === "all" ? `${matrixRows.length} peers` : `${rows.length}/${matrixRows.length} peers`;
+      els.matrixState.textContent = countText;
       els.matrixState.className = `badge ${rows.some(row => row.tier === "personal") ? "warn" : "ok"}`;
-      if (!rows.length) {
+      if (!matrixRows.length) {
         els.matrixRows.innerHTML = `<tr><td colspan="7" class="muted">No peers in agents file</td></tr>`;
+        return;
+      }
+      if (!rows.length) {
+        els.matrixRows.innerHTML = `<tr><td colspan="7" class="muted">No peers match this filter</td></tr>`;
         return;
       }
       els.matrixRows.innerHTML = rows.map((row, index) => {
@@ -1014,9 +1047,15 @@ APP_HTML = """<!doctype html>
     els.matrixRows.addEventListener("click", event => {
       const button = event.target.closest("[data-matrix-action]");
       if (!button) return;
-      const row = matrixRows[Number(button.dataset.rowIndex)];
+      const row = visibleMatrixRows[Number(button.dataset.rowIndex)];
       if (!row) return;
       runMatrixAction(row.pubkey, button.dataset.matrixAction);
+    });
+    document.querySelectorAll("[data-matrix-filter]").forEach(button => {
+      button.addEventListener("click", () => {
+        matrixFilter = button.dataset.matrixFilter;
+        renderMatrixRows();
+      });
     });
     els.runAudit.addEventListener("click", runAudit);
     async function init() {

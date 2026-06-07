@@ -1377,3 +1377,95 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git commit -m "Add matrix row actions to audit UI" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Created commit `32b1e48`, pushed branch from `fde650a` to `32b1e48`, and confirmed clean tracking status.
+
+### Tool: `functions.exec_command`
+- Command: `git add logs/codex_iteration_log.md && git commit -m "Log matrix row actions iteration" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created log-only commit `47ac317`, pushed branch from `32b1e48` to `47ac317`, and confirmed clean tracking status.
+
+## 2026-06-07 UI/UX Iteration 5 - Matrix Risk Filters
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Harvey `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: queued docs/understanding task for matrix risk filters.
+
+### Tool: `multi_agent_v1.send_input`
+- Target: Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: queued implementation/cross-check task for filter safety, row-index action correctness under filtering, and browser coverage.
+
+### Tool: `functions.apply_patch`
+- Files: `share_audit_server.py`
+- Result: exit 0. Added All/Personal/Appendable matrix filters, client-side filtered row rendering, visible row storage for row-index actions, and filter busy-state disabling.
+
+### Tool: `functions.apply_patch`
+- Files: `test_share_audit_ui_browser.py`
+- Result: exit 0. Added real Chrome assertions for personal filter count/text and filtered row action mapping to Dave.
+
+### Tool: `functions.apply_patch`
+- Files: `docs/share-audit-ui.md`
+- Result: exit 0. Documented matrix filters as view-only controls that do not change the underlying audit.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Syntax check passed after matrix filter implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. API/HTML tests passed after matrix filter implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. CLI exposure-audit tests passed after matrix filter implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Security tests passed after matrix filter implementation.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Real Chrome UI test passed, including personal filter, filtered row action mapping to Dave, preview action, no secret contents, and mobile overflow checks; screenshots in `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_qhs4lhiv/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_qhs4lhiv/share-audit-matrix.png`
+- Result: visually inspected final matrix-filter desktop screenshot; All/Personal/Appendable controls are readable.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_qhs4lhiv/share-audit-mobile.png`
+- Result: visually inspected final matrix-filter mobile screenshot; Personal filter shows `1/2 peers`, one stacked row, and readable actions.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_qhs4lhiv/share-audit-preview.png`
+- Result: visually inspected final matrix-filter preview screenshot; trust-change preview remains readable.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_qhs4lhiv/share-audit-desktop.png`
+- Result: visually inspected final matrix-filter desktop screenshot in task audit flow.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Targets: Harvey `019ea14d-5b44-7733-a597-6e630778810b`, Chandrasekhar `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: both returned stale checkout reports saying filters were not implemented. Main workspace diff and real Chrome tests showed filters were implemented and passing, so this was not treated as a blocker.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- share_audit_server.py | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed server diff showing filter toolbar, `matrixFilter`, `visibleMatrixRows`, filtered rendering, and filtered row actions.
+
+### Tool: `functions.exec_command`
+- Command: `git diff -- test_share_audit_ui_browser.py docs/share-audit-ui.md | sed -n '1,260p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed browser/docs diff for personal filter and filtered row-action coverage.
+
+### Tool: `functions.exec_command`
+- Command: `git diff --check && git diff --stat && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. No whitespace errors. Filter iteration diff before staging: 4 files changed, 134 insertions, 5 deletions.
+
+### Tool: `functions.exec_command`
+- Command: `rg -n "data-matrix-filter|rowsForMatrixFilter|visibleMatrixRows|matrix filters|All|Appendable" share_audit_server.py docs/share-audit-ui.md test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed filter controls, filtering logic, docs, and browser assertions are present.

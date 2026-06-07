@@ -237,6 +237,7 @@ def _page_state(cdp):
           previewEntries: document.querySelector('#previewEntries')?.textContent,
           previewHasPersonal: document.querySelector('#previewList')?.innerText.includes('personal/diary.md') || false,
           matrixState: document.querySelector('#matrixState')?.textContent,
+          matrixRowCount: document.querySelectorAll('#matrixRows tr').length,
           matrixText: document.querySelector('#matrixRows')?.innerText || '',
           matrixPersonalRows: document.querySelectorAll('.matrix-row-personal').length,
           matrixHasPersonalPath: document.querySelector('#matrixRows')?.innerText.includes('personal/diary.md') || false,
@@ -284,11 +285,21 @@ def main():
         assert common["hasPersonalPath"] is False, common
         assert common["hasSecretContent"] is False, common
         assert common["matrixState"] == "2 peers", common
+        assert common["matrixRowCount"] == 2, common
         assert "Carol" in common["matrixText"], common
         assert "Dave" in common["matrixText"], common
         assert common["matrixPersonalRows"] == 1, common
         assert common["matrixHasPersonalPath"] is False, common
         assert common["matrixHasUndefined"] is False, common
+        cdp.eval("document.querySelector('[data-matrix-filter=\"personal\"]').click();")
+        filtered = _page_state(cdp)
+        assert filtered["matrixState"] == "1/2 peers", filtered
+        assert filtered["matrixRowCount"] == 1, filtered
+        assert "Dave" in filtered["matrixText"], filtered
+        assert "Carol" not in filtered["matrixText"], filtered
+        cdp.eval("document.querySelector('[data-matrix-filter=\"all\"]').click();")
+        all_rows = _page_state(cdp)
+        assert all_rows["matrixState"] == "2 peers", all_rows
         cdp.eval("document.querySelector('[data-testid=\"peer-matrix-panel\"]').scrollIntoView({block: 'start'});")
         time.sleep(0.2)
         matrix_png = os.path.join(work, "share-audit-matrix.png")
@@ -346,6 +357,14 @@ def main():
         preview_png = os.path.join(work, "share-audit-preview.png")
         _screenshot(cdp, preview_png)
 
+        cdp.eval("document.querySelector('[data-matrix-filter=\"personal\"]').click(); document.querySelector('[data-matrix-action=\"preview\"][data-row-index=\"0\"]').click();")
+        _wait_status(cdp, "Preview ready")
+        filtered_action = _page_state(cdp)
+        assert filtered_action["selectedPeer"].startswith("Dave"), filtered_action
+        assert filtered_action["tier"] == "tier: personal", filtered_action
+        assert filtered_action["previewTier"] == "personal → personal", filtered_action
+        assert filtered_action["hasSecretContent"] is False, filtered_action
+
         cdp.send("Emulation.setDeviceMetricsOverride", {
             "width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True,
         })
@@ -360,6 +379,7 @@ def main():
         print("✅ browser task tier reveals task but not personal")
         print("✅ browser matrix inspect action selects a peer and runs audit")
         print("✅ browser matrix preview action opens the trust-change preview")
+        print("✅ browser matrix filters focus personal peers and preserve row actions")
         print("✅ browser peer flow loads Carol from agents.json")
         print("✅ browser peer matrix lists all peers and highlights personal tier")
         print("✅ browser trust preview shows newly exposed personal paths without contents")
