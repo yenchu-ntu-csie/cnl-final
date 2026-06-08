@@ -122,7 +122,7 @@ A 的 AI 看自己 tier 內 share/，自評對某 topic 有沒有資料、哪些
 ### 5.1 前置檢查
 
 ```bash
-cd ~/Documents/大三/CNL/cnl-final
+cd cnl-final # if you havn't already
 
 # Python 套件
 pip install -r requirements.txt   # 或 pip install pydantic cryptography
@@ -170,13 +170,13 @@ find share -type f | sort
 
 **終端 ① relay**
 ```bash
-cd ~/Documents/大三/CNL/cnl-final/_test
+cd _test
 python3 ../relay_server.py --port 19000
 ```
 
 **終端 ② Alice = A 收訊方**（共用第三終端機要用的 _test 目錄）
 ```bash
-cd ~/Documents/大三/CNL/cnl-final/_test
+cd _test
 python3 ../p2p_node.py --port 18001 --key-file linkedout_A.key --name Alice \
   --server-ip 127.0.0.1 --server-port 19000
 # 看到 ✅ [Relay] Registered as ... 就 OK
@@ -184,7 +184,7 @@ python3 ../p2p_node.py --port 18001 --key-file linkedout_A.key --name Alice \
 
 **終端 ③ Bob = B 送訊方**（每次測試獨立跑，Ctrl-C 結束再下一條）
 ```bash
-cd ~/Documents/大三/CNL/cnl-final/_test
+cd _test
 A_PUB=$(python3 -c "import sys;sys.path.insert(0,'..');import e2ee;print(e2ee.public_hex(e2ee.load_or_create_identity('linkedout_A.key')))")
 NODE_B=(python3 ../p2p_node.py --port 18002 --key-file linkedout_B.key --name Bob
         --server-ip 127.0.0.1 --server-port 19000 --peer-pubkey "$A_PUB")
@@ -270,7 +270,6 @@ python3 ../agents.py set-tier "$B_PUB" task
 主持人 Carol 平行探測 Alice、Bob 對某題目的能力，再針對性追問、合成。
 
 ```bash
-cd ~/Documents/大三/CNL/cnl-final
 mkdir -p _group && cd _group
 
 # 三把身分
@@ -344,7 +343,6 @@ python3 ../p2p_node.py --port 8003 --key-file linkedout_C.key --name Carol --sha
 
 ### 5.7 清理
 ```bash
-cd ~/Documents/大三/CNL/cnl-final
 rm -rf _test
 # 終端 ①②③ Ctrl-C
 ```
