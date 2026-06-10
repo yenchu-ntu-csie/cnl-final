@@ -2154,3 +2154,170 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git add logs/codex_iteration_log.md && git commit -m "Log problem scenario publish details" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Purpose: publish this append-only record of the problem-solving scenario correction commit and push.
+
+## 2026-06-11 00:24 CST - Ask Composer UI/UX Correction
+
+### User-facing correction
+- The user clarified that the real missing product surface was not another audit explanation, but an actual question-asking UI/UX. The dashboard was changed so Bob starts with an `Ask Composer`, types/selects a real question, and gets a content-free ask preflight showing target, mode, context scope, excluded zones, readiness, and a `p2p_node.py --op ask` command preview.
+
+### Tool: `functions.exec_command`
+- Command: `pwd && rg --files -g 'AGENTS.md' -g '!**/.git/**'`
+- Workdir: `/Users/user0/code/CNLab/Final`
+- Result: exit 1 after printing `/Users/user0/code/CNLab/Final`; no nested `AGENTS.md` file was found by `rg --files`.
+
+### Tool: `tool_search.tool_search_tool`
+- Query: `spawn manage subagents send task resume existing subagent`
+- Result: exposed `multi_agent_v1` tools for the requested persistent subagent workflow.
+
+### Tool: `multi_tool_use.parallel`
+- Tools:
+  - `multi_agent_v1.resume_agent` for docs/understanding agent `019ea14d-5b44-7733-a597-6e630778810b`
+  - `multi_agent_v1.resume_agent` for implementation/cross-check agent `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: both prior subagents were resumed. They had previously recommended scenario cards and content-free constraints.
+
+### Tool: `multi_tool_use.parallel`
+- Tools:
+  - `multi_agent_v1.send_input` to docs/understanding agent for the concrete-question/dialogue correction.
+  - `multi_agent_v1.send_input` to implementation/cross-check agent for hidden-content/leakage review.
+  - `functions.exec_command`: `git status --short --branch`
+  - `functions.exec_command`: `git log --oneline --decorate -6`
+  - `functions.exec_command`: `rg -n "Concrete Question|conversation|question|dialogue|checks|data-testid=\"conversation" share_audit_server.py test_share_audit_ui_browser.py docs/share-audit-ui.md script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: confirmed branch `codex/ui-ux-10x-20260607` was ahead of origin by one local log-only commit and had uncommitted UI/video/test/doc changes.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_ezjqxoeb/share-audit-self.png`
+- Result: visually confirmed the then-current first viewport showed `Concrete Question & Dialogue`, but not a real typed ask workflow.
+
+### Tool: `multi_tool_use.parallel`
+- Tools:
+  - `multi_agent_v1.send_input` to docs/understanding agent for the new typed-ask UI/UX question.
+  - `multi_agent_v1.send_input` to implementation/cross-check agent for smallest safe Ask Composer implementation.
+  - `functions.exec_command`: `git status --short --branch`
+  - `functions.exec_command`: `rg -n "ask|context|chunk|query|question|audit|preview|llm|answer" -g '*.py' -g '*.md'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: found existing `ask` support in `app_layer.py`, `p2p_node.py`, setup docs, tests, and audit code.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `sed -n '1,180p' app_layer.py`
+  - `sed -n '180,360p' app_layer.py`
+  - `rg -n "def _collect_ask_context|def _do_ask|make_request|FileRequest|FileResponse|ASK_MODES|DEFAULT_ASK_MODE|context" app_layer.py`
+  - `rg -n "def api_|/api/|preview-tier-change|audit|matrix|respond_json|run_server|HTTP" share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: confirmed `app_layer` already supports `ask` with `remote`/`local`, tier-filtered context collection, and content caps, while `share_audit_server.py` lacked any ask UI or ask-planning endpoint.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `sed -n '1,260p' share_audit.py`
+  - `sed -n '1180,1465p' share_audit_server.py`
+  - `sed -n '1620,1820p' share_audit_server.py`
+  - `sed -n '300,560p' app_layer.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: inspected the audit payload shape, existing JS render functions, current API endpoints, and app-layer response handling.
+
+### Tool: `functions.apply_patch`
+- Paths:
+  - `share_audit_server.py`
+  - `test_share_audit_server.py`
+  - `test_share_audit_ui_browser.py`
+  - `docs/share-audit-ui.md`
+  - `script/record_share_audit_demo.py`
+- Result: added `Ask Composer`, `/api/ask-plan`, ask readiness rendering, scenario-to-question syncing, server/browser tests, docs, and updated Chinese demo captions. Initial endpoint implementation used GET.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 after fixing a Python string escape warning in the embedded JS regex.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for a local loopback test server.
+- Result: exit 0. API tests passed, including the new ask-plan content-free test.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server and headless Chrome.
+- Result: first run failed because the alias detector treated `demo` as `task/`, making scenario 1 falsely constrained. The alias list was narrowed to `task`, `project`, and `work`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: browser test requested and approved for local dashboard server and headless Chrome.
+- Result: exit 0 for both. Browser test passed and saved screenshots under `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_bjp7oq4y/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_bjp7oq4y/share-audit-self.png`
+- Result: visually confirmed the first viewport now starts with `Ask Composer`, a real question, `ask ready`, target, context chunks, visible entries, context zones, and excluded zones.
+
+### Tool: `multi_agent_v1.wait_agent`
+- Agents:
+  - `019ea14d-5b44-7733-a597-6e630778810b`
+  - `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: docs agent confirmed existing ask support lives in `app_layer.py`/`p2p_node.py` and recommended clearly separating audit, scripted dialogue, and real ask UI. Implementation agent green-lit an Ask Composer/dry-run direction and flagged that full questions should not be sent via GET URLs because local server logs include request paths.
+
+### Tool: `functions.apply_patch`
+- Paths:
+  - `share_audit_server.py`
+  - `test_share_audit_server.py`
+- Result: changed ask-plan from GET query string to POST JSON, added bounded JSON body parsing, removed the GET route, and updated tests to assert GET `/api/ask-plan` returns 404.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: server test requested and approved for local loopback server.
+- Result: exit 0 for both. Server log now shows `POST /api/ask-plan` without the question in the URL.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: both requested and approved for local loopback server and headless Chrome.
+- Result: exit 0 for both. Browser test confirmed five scenario ask plans, POST ask-plan calls, content-free behavior, and mobile no horizontal overflow. Screenshots were written under `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_z0x5c038/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_z0x5c038/share-audit-self.png`
+- Result: visually rechecked the POST-based Ask Composer first viewport; the design remained intact.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server, headless Chrome, and ffmpeg.
+- Result: exit 0. Regenerated `demo/artifacts/share-audit-demo.mp4` and `demo/artifacts/share-audit-demo.zh.srt`, `336` frames, with Ask Composer-focused Chinese captions. Recorder logs used `POST /api/ask-plan`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate -show_entries format=duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `sed -n '1,100p' demo/artifacts/share-audit-demo.zh.srt`
+  - `ffmpeg -y -ss 00:00:04 -i demo/artifacts/share-audit-demo.mp4 -frames:v 1 /private/tmp/share-audit-demo-ask-check.png`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Verified H.264, `1366x768`, `8/1` fps, `42.000000` seconds. SRT now explains Ask Composer, target, context scope, excluded zones, and constrained asks.
+
+### Tool: `functions.view_image`
+- Path: `/private/tmp/share-audit-demo-ask-check.png`
+- Result: visually confirmed the extracted video frame shows Ask Composer with Chinese captions describing the question-first flow.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `git diff --stat`
+  - `git diff --check`
+  - `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Diff check was clean. Branch remained ahead of origin by one local log-only commit before this new Ask Composer commit.
+
+### Tool: `functions.exec_command`
+- Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Timestamped this log entry as `2026-06-11 00:24:11 CST`.
+
+### Planned final publish command for this correction
+- Command: `git add demo/artifacts/share-audit-demo.mp4 demo/artifacts/share-audit-demo.zh.srt docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py && git diff --cached --stat && git diff --cached --check && git commit -m "Add ask composer to audit UI" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish the Ask Composer UI/UX, POST ask-plan API, tests, docs, regenerated demo video/SRT, and append-only log entry.

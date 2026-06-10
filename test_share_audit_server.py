@@ -44,6 +44,18 @@ def _get_json(base, path, **query):
         return json.loads(res.read().decode("utf-8"))
 
 
+def _post_json(base, path, **payload):
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base}{path}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5) as res:
+        return json.loads(res.read().decode("utf-8"))
+
+
 def _get_response(base, path="/", headers=None):
     req = urllib.request.Request(f"{base}{path}", headers=headers or {})
     return urllib.request.urlopen(req, timeout=5)
@@ -88,6 +100,49 @@ def test_api_rejects_missing_subject():
             assert e.code == 400, e.code
             assert body["ok"] is False, body
         print("✅ audit UI API rejects missing tier/peer")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_api_plans_ask_without_contents_or_hidden_paths():
+    _, share, agents_file, pub = _seed()
+    server = share_audit_server.make_server("127.0.0.1", 0, share, agents_file)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        plan = _post_json(
+            base,
+            "/api/ask-plan",
+            share=share,
+            agents_file=agents_file,
+            peer_pubkey=pub,
+            mode="remote",
+            query="Can Bob ask about task and personal context?",
+        )
+        rendered = json.dumps(plan, ensure_ascii=False)
+        ask_plan = plan["ask_plan"]
+        assert plan["ok"] is True, plan
+        assert ask_plan["mode"] == "remote", plan
+        assert ask_plan["tier"] == "task", plan
+        assert ask_plan["readiness"]["state"] == "ask constrained", plan
+        assert "task" in ask_plan["visible_zones"], plan
+        assert "personal" in ask_plan["hidden_zones"], plan
+        assert "personal" in ask_plan["mentioned_hidden_zones"], plan
+        assert ask_plan["ask_context"]["content_included"] is False, plan
+        assert "--op ask --mode remote" in ask_plan["command"], plan
+        assert pub in ask_plan["command"], plan
+        assert "SECRET gamma" not in rendered, rendered
+        assert "TASK beta" not in rendered, rendered
+        assert "PUBLIC alpha" not in rendered, rendered
+        assert "personal/secret.md" not in rendered, rendered
+        try:
+            _get_json(base, "/api/ask-plan")
+            raise AssertionError("GET ask-plan should not be available")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404, e.code
+        print("✅ audit UI API plans ask flow without file contents or hidden paths")
     finally:
         server.shutdown()
         server.server_close()
@@ -205,6 +260,9 @@ def test_html_is_safe_and_browser_testable():
             assert 'share&quot; autofocus onfocus=&quot;alert(1)' in body, body
             assert 'value="share" autofocus' not in body, body
             assert 'data-testid="self-audit-panel"' in body, body
+            assert 'data-testid="ask-composer-panel"' in body, body
+            assert 'data-testid="plan-ask"' in body, body
+            assert "/api/ask-plan" in body, body
             assert 'data-testid="scenario-panel"' in body, body
             assert 'data-scenario-run="' in body, body
             assert 'data-testid="run-audit"' in body, body
@@ -241,6 +299,7 @@ def test_rejects_dns_rebinding_host_header():
 if __name__ == "__main__":
     test_api_serves_audit_and_agents()
     test_api_rejects_missing_subject()
+    test_api_plans_ask_without_contents_or_hidden_paths()
     test_api_previews_trust_change_without_contents()
     test_api_serves_peer_matrix_without_contents_or_paths()
     test_api_serves_local_self_audit_without_contents()

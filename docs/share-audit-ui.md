@@ -8,6 +8,14 @@ python3 share_audit_server.py --share share --agents-file agents.json
 
 Open the printed `http://127.0.0.1:...` URL. The server is local by default and the UI/API return paths and counts only, never file contents. It is meant to run beside Bob's own `share/` and `agents.json`, not as a central audit service.
 
+## Ask Composer
+
+Use `Ask Composer` as Bob's starting point. Type or select a concrete question, choose `remote answer` or `local synthesis`, then click `Plan ask`.
+
+The plan shows the target peer/tier, visible context zones, excluded zones, visible-entry count, ask chunk count, readiness status, and a `p2p_node.py --op ask --query ...` command preview. This is a preflight step only: it does not call Ollama, contact the relay, or return raw chunks/file bodies to the browser.
+
+Use this before sending the real question through `p2p_node.py`, especially when the question mentions `task/` or `personal/`. If a question mentions a zone the selected peer/tier cannot see, the composer marks the ask as constrained instead of pretending the answer will include that context.
+
 ## Bob Scenario Walkthrough
 
 Use the scenario cards at the top of the dashboard when the raw audit controls are too abstract. Each card is a concrete Bob-side decision problem with `Problem`, `Evidence`, and `Decision` text:
@@ -19,6 +27,8 @@ Use the scenario cards at the top of the dashboard when the raw audit controls a
 - `Should Bob promote Carol to personal?`: previews newly exposed paths and ask-context delta before editing `agents.json`.
 
 The cards do not create a central scenario service and do not read note contents. They only set existing controls, call the existing local endpoints, and scroll to the evidence panel for that decision.
+
+The `Concrete Question & Dialogue` panel above the cards shows the actual demo question, a short scripted conversation, and an `Evidence checks` bullet list telling Bob exactly which UI panel or value to inspect. It is intentionally synthetic and content-free: it explains what Bob asks, what the audit proves, and which panel to inspect, but it does not quote note bodies.
 
 The checked-in demo video is generated from these cards:
 

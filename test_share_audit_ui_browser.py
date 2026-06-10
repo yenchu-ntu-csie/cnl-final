@@ -237,6 +237,21 @@ def _page_state(cdp):
           scenarioCount: document.querySelectorAll('[data-scenario-run]').length,
           activeScenario: document.querySelector('.scenario-item.active')?.dataset.scenarioId || '',
           scenarioPanelText: document.querySelector('[data-testid="scenario-panel"]')?.innerText || '',
+          askPanelText: document.querySelector('[data-testid="ask-composer-panel"]')?.innerText || '',
+          askQuestion: document.querySelector('#askQuestion')?.value || '',
+          askState: document.querySelector('#askState')?.textContent || '',
+          askTarget: document.querySelector('#askTarget')?.textContent || '',
+          askContext: document.querySelector('#askContext')?.textContent || '',
+          askEntries: document.querySelector('#askEntries')?.textContent || '',
+          askVisibleZonesText: document.querySelector('#askVisibleZones')?.innerText || '',
+          askHiddenZonesText: document.querySelector('#askHiddenZones')?.innerText || '',
+          askFindingCount: document.querySelectorAll('#askFindings .risk').length,
+          askCommand: document.querySelector('#askCommand')?.textContent || '',
+          conversationPanelText: document.querySelector('[data-testid="conversation-panel"]')?.innerText || '',
+          conversationQuestion: document.querySelector('#conversationQuestion')?.textContent || '',
+          conversationEvidenceText: document.querySelector('#conversationEvidence')?.innerText || '',
+          conversationEvidenceCount: document.querySelectorAll('#conversationEvidence li').length,
+          conversationTurnCount: document.querySelectorAll('#conversationTurns .dialogue-turn').length,
           hasProfile: document.body.innerText.includes('read-only/profile.md'),
           hasTask: document.body.innerText.includes('task/demo.md'),
           hasPersonalPath: document.body.innerText.includes('personal/diary.md'),
@@ -278,6 +293,87 @@ def _run_scenario(cdp, scenario_id):
     raise AssertionError(f"scenario {scenario_id!r} did not become ready: {state}")
 
 
+def _assert_conversation(state, scenario_id):
+    expected = {
+        "my-computer": {
+            "question": "what exactly can a common peer see",
+            "dialogue": "Can I prove this audit is about my own laptop",
+            "evidence": "Visible zones count is 2",
+        },
+        "who-trust": {
+            "question": "Which friends are in my local agents.json",
+            "dialogue": "who does my node actually trust",
+            "evidence": "Open Peer Exposure Matrix",
+        },
+        "who-can-write": {
+            "question": "who can write into my read&append/ area",
+            "dialogue": "Which friends can modify my shared surface",
+            "evidence": "Use the Appendable matrix filter",
+        },
+        "inspect-carol": {
+            "question": "without seeing my personal notes",
+            "dialogue": "Carol needs project context",
+            "evidence": "Visible listing includes task/demo.md",
+        },
+        "upgrade-trust": {
+            "question": "What would become visible",
+            "dialogue": "Preview compares current task access",
+            "evidence": "Check New zones and New entries",
+        },
+    }[scenario_id]
+    assert expected["question"] in state["conversationQuestion"], state
+    assert expected["dialogue"] in state["conversationPanelText"], state
+    assert expected["evidence"] in state["conversationEvidenceText"], state
+    assert state["conversationEvidenceCount"] == 3, state
+    assert state["conversationTurnCount"] == 4, state
+
+
+def _assert_ask_plan(state, scenario_id):
+    expected = {
+        "my-computer": {
+            "question": "what exactly can a common peer see",
+            "state": "ask ready",
+            "target": "explicit tier · common",
+            "visible": "read-only/",
+        },
+        "who-trust": {
+            "question": "Which friends are in my local agents.json",
+            "state": "ask ready",
+            "target": "explicit tier · common",
+            "visible": "read&append/",
+        },
+        "who-can-write": {
+            "question": "who can write into my read&append/ area",
+            "state": "ask ready",
+            "target": "explicit tier · common",
+            "visible": "read&append/",
+        },
+        "inspect-carol": {
+            "question": "without seeing my personal notes",
+            "state": "ask constrained",
+            "target": "Carol · task",
+            "visible": "task/",
+            "hidden": "personal/",
+        },
+        "upgrade-trust": {
+            "question": "What would become visible",
+            "state": "ask constrained",
+            "target": "Carol · task",
+            "visible": "task/",
+            "hidden": "personal/",
+        },
+    }[scenario_id]
+    assert expected["question"] in state["askQuestion"], state
+    assert state["askState"] == expected["state"], state
+    assert state["askTarget"] == expected["target"], state
+    assert expected["visible"] in state["askVisibleZonesText"], state
+    if "hidden" in expected:
+        assert expected["hidden"] in state["askHiddenZonesText"], state
+    assert state["askFindingCount"] >= 4, state
+    assert "SECRET:" not in state["askPanelText"], state
+    assert "personal/diary.md" not in state["askPanelText"], state
+
+
 def _screenshot(cdp, path):
     shot = cdp.send("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False})
     with open(path, "wb") as f:
@@ -317,6 +413,14 @@ def main():
         assert "Decision:" in common["scenarioPanelText"], common
         assert "Can Bob demo safely from this laptop?" in common["scenarioPanelText"], common
         assert "Should Bob promote Carol to personal?" in common["scenarioPanelText"], common
+        assert common["activeScenario"] == "my-computer", common
+        assert "Ask Composer" in common["askPanelText"], common
+        assert not common["askQuestion"].startswith("Bob:"), common
+        _assert_ask_plan(common, "my-computer")
+        assert "QUESTION BOB ASKS" in common["conversationPanelText"], common
+        assert "Can I prove this audit is about my own laptop" in common["conversationPanelText"], common
+        assert common["conversationTurnCount"] == 4, common
+        _assert_conversation(common, "my-computer")
         self_png = os.path.join(work, "share-audit-self.png")
         _screenshot(cdp, self_png)
         assert common["visibleZones"] == "2", common
@@ -410,17 +514,23 @@ def main():
         assert scenario_self["tier"] == "tier: common", scenario_self
         assert scenario_self["visibleZones"] == "2", scenario_self
         assert scenario_self["hasTask"] is False, scenario_self
+        _assert_conversation(scenario_self, "my-computer")
+        _assert_ask_plan(scenario_self, "my-computer")
 
         scenario_matrix = _run_scenario(cdp, "who-trust")
         assert scenario_matrix["matrixActiveFilter"] == "all", scenario_matrix
         assert scenario_matrix["matrixState"] == "2 peers", scenario_matrix
         assert "Carol" in scenario_matrix["matrixText"], scenario_matrix
         assert "Dave" in scenario_matrix["matrixText"], scenario_matrix
+        _assert_conversation(scenario_matrix, "who-trust")
+        _assert_ask_plan(scenario_matrix, "who-trust")
 
         scenario_write = _run_scenario(cdp, "who-can-write")
         assert scenario_write["matrixActiveFilter"] == "appendable", scenario_write
         assert scenario_write["matrixState"] == "2/2 peers", scenario_write
         assert scenario_write["matrixHasPersonalPath"] is False, scenario_write
+        _assert_conversation(scenario_write, "who-can-write")
+        _assert_ask_plan(scenario_write, "who-can-write")
 
         scenario_inspect = _run_scenario(cdp, "inspect-carol")
         assert scenario_inspect["mode"] == "peer", scenario_inspect
@@ -428,12 +538,21 @@ def main():
         assert scenario_inspect["tier"] == "tier: task", scenario_inspect
         assert scenario_inspect["hasTask"] is True, scenario_inspect
         assert scenario_inspect["hasPersonalPath"] is False, scenario_inspect
+        assert "--op ask --mode remote" in scenario_inspect["askCommand"], scenario_inspect
+        assert "cccccccc" in scenario_inspect["askCommand"], scenario_inspect
+        _assert_conversation(scenario_inspect, "inspect-carol")
+        _assert_ask_plan(scenario_inspect, "inspect-carol")
 
         scenario_preview = _run_scenario(cdp, "upgrade-trust")
         assert scenario_preview["mode"] == "peer", scenario_preview
         assert scenario_preview["selectedPeer"].startswith("Carol"), scenario_preview
         assert scenario_preview["previewTier"] == "task → personal", scenario_preview
         assert scenario_preview["previewHasPersonal"] is True, scenario_preview
+        assert "What would become visible" in scenario_preview["conversationQuestion"], scenario_preview
+        assert "Newly exposed paths include personal/" in scenario_preview["conversationPanelText"], scenario_preview
+        assert "Question asks outside current tier" in scenario_preview["askPanelText"], scenario_preview
+        _assert_conversation(scenario_preview, "upgrade-trust")
+        _assert_ask_plan(scenario_preview, "upgrade-trust")
 
         cdp.send("Emulation.setDeviceMetricsOverride", {
             "width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True,

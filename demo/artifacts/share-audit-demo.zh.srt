@@ -1,29 +1,29 @@
 1
 00:00:00,000 --> 00:00:06,000
-這版 demo 不是功能巡覽，而是 Bob 的五個實際決策問題。
-每張卡都回答：問題是什麼、證據在哪裡、最後該怎麼決定。
+這版 demo 從提問開始，不是只看 audit log。
+畫面上方的 Ask Composer 會顯示 Bob 的問題、target、context scope、excluded zones。
 
 2
 00:00:06,000 --> 00:00:13,000
-問題 1：Bob 能不能安全地用這台電腦 demo？
-證據：self-audit 顯示 audit 跑在本機、share zones 和 common-tier exposure。決策：不要依賴中央伺服器。
+具體問句 1：如果我從這台 laptop demo，common peer 到底能看到什麼？
+Ask plan：target 是 explicit common；context 只有 common zones，不是中央伺服器判斷。
 
 3
 00:00:13,000 --> 00:00:20,000
-問題 2：Bob 目前到底信任誰？
-證據：matrix 只讀 Bob 本機 agents.json，列出每個 peer 的 tier 和可見 zones。決策：只有這裡出現的人是直接 trust decision。
+具體問句 2：我的 agents.json 裡到底有哪些朋友、各是什麼 tier？
+Ask plan + matrix：列出 Carol、Dave 的 tier、zones、ask chunks，但不顯示筆記內容。
 
 4
 00:00:20,000 --> 00:00:27,000
-問題 3：誰能在 live demo 時寫進 Bob 的 inbox？
-證據：Appendable filter 把可寫入 read&append/ 的 peer 挑出來。決策：先審這些人，再開放協作。
+具體問句 3：live demo 時，誰可以寫進我的 read&append/ inbox？
+Ask Composer 保留問題；Appendable filter 只留下有寫入權的 peer，讓 Bob 先審寫入風險。
 
 5
 00:00:27,000 --> 00:00:34,000
-問題 4：Carol 能加入 project，但不看到 personal notes 嗎？
-證據：inspect Carol 後可以看到 task/，但 personal/ 仍然隱藏。決策：Carol 適合 project collaboration。
+具體問句 4：Carol 可以幫 project，但不看到 personal notes 嗎？
+Ask plan 會標成 constrained：問題提到 personal/，但 Carol 的 task tier 不會帶入 personal context。
 
 6
 00:00:34,000 --> 00:00:42,000
-問題 5：Bob 該不該把 Carol 升到 personal？
-證據：preview 在改 agents.json 前列出新曝光 paths 和 ask chunk delta。決策：除非這些 personal paths 是預期的，否則不要升級。
+具體問句 5：如果把 Carol 從 task 升到 personal，會多曝光什麼？
+Preview 先列新 paths 和 ask chunk delta；真正送出 ask 前先看這個差異。

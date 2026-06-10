@@ -11,8 +11,9 @@ import html
 import ipaddress
 import json
 import os
+import shlex
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit
 
 import agents
@@ -55,7 +56,7 @@ APP_HTML = """<!doctype html>
       font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       letter-spacing: 0;
     }
-    button, input, select { font: inherit; }
+    button, input, select, textarea { font: inherit; }
     .shell {
       min-height: 100vh;
       display: grid;
@@ -133,7 +134,7 @@ APP_HTML = """<!doctype html>
       font-size: 12px;
       font-weight: 650;
     }
-    input, select {
+    input, select, textarea {
       width: 100%;
       min-width: 0;
       max-width: 100%;
@@ -145,7 +146,12 @@ APP_HTML = """<!doctype html>
       padding: 8px 10px;
       outline: none;
     }
-    input:focus, select:focus {
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+      line-height: 1.42;
+    }
+    input:focus, select:focus, textarea:focus {
       border-color: var(--blue);
       box-shadow: 0 0 0 3px rgba(28, 111, 183, 0.14);
     }
@@ -180,6 +186,77 @@ APP_HTML = """<!doctype html>
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+    .ask-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .ask-controls {
+      display: grid;
+      grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+      gap: 8px;
+      align-items: end;
+    }
+    .ask-result {
+      display: grid;
+      gap: 10px;
+    }
+    .ask-readiness {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #ffffff;
+      min-width: 0;
+    }
+    .ask-readiness.ready { border-left: 4px solid var(--green); }
+    .ask-readiness.warn { border-left: 4px solid var(--amber); }
+    .ask-readiness.blocked { border-left: 4px solid var(--red); }
+    .ask-readiness strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+    .ask-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .ask-cell {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fafbfc;
+      min-width: 0;
+    }
+    .ask-cell .value {
+      margin-top: 5px;
+      font-size: 16px;
+      font-weight: 760;
+      overflow-wrap: anywhere;
+    }
+    .zone-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+    .ask-finding-list {
+      display: grid;
+      gap: 7px;
+    }
+    .ask-command {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #f8fafb;
+      color: #263442;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .primary {
       width: 100%;
@@ -450,6 +527,72 @@ APP_HTML = """<!doctype html>
       color: #19212a;
       font-weight: 760;
     }
+    .dialogue-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 12px;
+    }
+    .question-card,
+    .dialogue-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      min-width: 0;
+    }
+    .question-card .label,
+    .dialogue-card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+    .question-card .evidence-label {
+      margin-top: 14px;
+    }
+    .question-text {
+      margin-top: 7px;
+      font-size: 17px;
+      font-weight: 760;
+      line-height: 1.35;
+    }
+    .dialogue-turns {
+      display: grid;
+      gap: 7px;
+      margin-top: 10px;
+    }
+    .dialogue-turn {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f9fbfc;
+    }
+    .dialogue-speaker {
+      color: #0f4c81;
+      font-size: 12px;
+      font-weight: 780;
+    }
+    .dialogue-line {
+      color: #263442;
+      font-size: 13px;
+      line-height: 1.42;
+    }
+    .evidence-list {
+      display: grid;
+      gap: 6px;
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .evidence-list li {
+      color: #435262;
+      font-size: 13px;
+      line-height: 1.4;
+    }
     .zone-pills {
       display: flex;
       flex-wrap: wrap;
@@ -542,7 +685,9 @@ APP_HTML = """<!doctype html>
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .self-grid { grid-template-columns: 1fr; }
       .import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .ask-layout { grid-template-columns: 1fr; }
       .scenario-list { grid-template-columns: 1fr; }
+      .dialogue-layout { grid-template-columns: 1fr; }
       .grid2 { grid-template-columns: 1fr; }
       .preview-grid { grid-template-columns: 1fr; }
     }
@@ -552,6 +697,8 @@ APP_HTML = """<!doctype html>
       .summary { grid-template-columns: 1fr; }
       .import-grid { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
+      .ask-controls { grid-template-columns: 1fr; }
+      .ask-grid { grid-template-columns: 1fr; }
       .metric .value { font-size: 22px; }
       .segmented button {
         padding-left: 4px;
@@ -659,6 +806,82 @@ APP_HTML = """<!doctype html>
       </aside>
       <section class="workspace">
         <div class="panel error" id="error"></div>
+        <section class="panel" data-testid="ask-composer-panel">
+          <div class="panel-head">
+            <h2>Ask Composer</h2>
+            <span class="badge info" id="askState">draft</span>
+          </div>
+          <div class="panel-body">
+            <div class="ask-layout">
+              <div>
+                <div class="field">
+                  <label for="askQuestion">Question</label>
+                  <textarea id="askQuestion" data-testid="ask-question" autocomplete="off"></textarea>
+                </div>
+                <div class="ask-controls">
+                  <div class="field">
+                    <label for="askMode">Ask mode</label>
+                    <select id="askMode" data-testid="ask-mode">
+                      <option value="remote">remote answer</option>
+                      <option value="local">local synthesis</option>
+                    </select>
+                  </div>
+                  <button class="primary" id="planAsk" type="button" data-testid="plan-ask">Plan ask</button>
+                </div>
+              </div>
+              <div class="ask-result" id="askPlan" data-testid="ask-plan">
+                <div class="ask-readiness blocked" id="askReadiness">
+                  <strong>Question not planned</strong>
+                  <span class="muted">-</span>
+                </div>
+                <div class="ask-grid">
+                  <div class="ask-cell">
+                    <div class="label">Target</div>
+                    <div class="value" id="askTarget">-</div>
+                  </div>
+                  <div class="ask-cell">
+                    <div class="label">Context chunks</div>
+                    <div class="value" id="askContext">-</div>
+                  </div>
+                  <div class="ask-cell">
+                    <div class="label">Visible entries</div>
+                    <div class="value" id="askEntries">-</div>
+                  </div>
+                </div>
+                <div class="ask-cell">
+                  <div class="label">Context zones</div>
+                  <div class="zone-pills" id="askVisibleZones"></div>
+                </div>
+                <div class="ask-cell">
+                  <div class="label">Excluded zones</div>
+                  <div class="zone-pills" id="askHiddenZones"></div>
+                </div>
+                <div class="ask-finding-list" id="askFindings"></div>
+                <pre class="ask-command" id="askCommand"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel" data-testid="conversation-panel">
+          <div class="panel-head">
+            <h2>Concrete Question & Dialogue</h2>
+            <span class="badge info" id="conversationState">select scenario</span>
+          </div>
+          <div class="panel-body">
+            <div class="dialogue-layout">
+              <div class="question-card">
+                <div class="label">Question Bob asks</div>
+                <div class="question-text" id="conversationQuestion">-</div>
+                <div class="label evidence-label">Evidence checks</div>
+                <ul class="evidence-list" id="conversationEvidence"></ul>
+              </div>
+              <div class="dialogue-card">
+                <div class="label">Dialogue</div>
+                <div class="dialogue-turns" id="conversationTurns"></div>
+              </div>
+            </div>
+          </div>
+        </section>
         <section class="panel" data-testid="scenario-panel">
           <div class="panel-head">
             <h2>Bob Scenario Walkthrough</h2>
@@ -851,6 +1074,22 @@ APP_HTML = """<!doctype html>
       importZones: document.getElementById("importZones"),
       scenarioList: document.getElementById("scenarioList"),
       scenarioState: document.getElementById("scenarioState"),
+      askState: document.getElementById("askState"),
+      askQuestion: document.getElementById("askQuestion"),
+      askMode: document.getElementById("askMode"),
+      planAsk: document.getElementById("planAsk"),
+      askReadiness: document.getElementById("askReadiness"),
+      askTarget: document.getElementById("askTarget"),
+      askContext: document.getElementById("askContext"),
+      askEntries: document.getElementById("askEntries"),
+      askVisibleZones: document.getElementById("askVisibleZones"),
+      askHiddenZones: document.getElementById("askHiddenZones"),
+      askFindings: document.getElementById("askFindings"),
+      askCommand: document.getElementById("askCommand"),
+      conversationState: document.getElementById("conversationState"),
+      conversationQuestion: document.getElementById("conversationQuestion"),
+      conversationEvidence: document.getElementById("conversationEvidence"),
+      conversationTurns: document.getElementById("conversationTurns"),
       matrixState: document.getElementById("matrixState"),
       matrixRows: document.getElementById("matrixRows"),
       runAudit: document.getElementById("runAudit"),
@@ -864,7 +1103,19 @@ APP_HTML = """<!doctype html>
         title: "Can Bob demo safely from this laptop?",
         problem: "Bob must prove the audit is local before starting the node.",
         evidence: "Self-audit shows this computer, local share zones, friend count, and common-tier exposure.",
-        decision: "Run the demo from this machine; do not treat audit as a central service."
+        decision: "Run the demo from this machine; do not treat audit as a central service.",
+        question: "Bob: If I start the demo from this laptop, what exactly can a common peer see?",
+        dialogue: [
+          ["Bob", "Can I prove this audit is about my own laptop, not a central server?"],
+          ["Audit", "Yes. The self-audit panel says this computer, shows Bob's local share path, and counts friends from this local agents.json."],
+          ["Audit", "For common peers, visible zones are read-only/ and read&append/. task/ and personal/ stay hidden."],
+          ["Bob", "Decision: I can demo from here and explain that every user runs this locally."]
+        ],
+        checks: [
+          "Look at This Computer Self-Audit: host is this computer.",
+          "Visible zones count is 2 for common tier.",
+          "Risk notes say the UI receives paths and aggregate counts only."
+        ]
       },
       {
         id: "who-trust",
@@ -872,7 +1123,19 @@ APP_HTML = """<!doctype html>
         title: "Who is actually in Bob's trust list?",
         problem: "Bob needs to know which peers his node will accept before the demo.",
         evidence: "The matrix reads Bob's local agents.json and compares peer tiers without note contents.",
-        decision: "Only peers shown here are direct local trust decisions."
+        decision: "Only peers shown here are direct local trust decisions.",
+        question: "Bob: Which friends are in my local agents.json, and what tier did I give each one?",
+        dialogue: [
+          ["Bob", "Before I ask anything, who does my node actually trust?"],
+          ["Audit", "The matrix loads Bob's local agents.json and lists each peer with tier, visible zones, ask chunks, and append zones."],
+          ["Audit", "Carol is task-level in this demo; Dave is personal-level. No note bodies are shown."],
+          ["Bob", "Decision: if a person is absent from this matrix, Bob has not made a direct local trust decision for them."]
+        ],
+        checks: [
+          "Open Peer Exposure Matrix.",
+          "Confirm peer rows come from the local agents file.",
+          "Confirm the matrix has aggregate counts, not file contents."
+        ]
       },
       {
         id: "who-can-write",
@@ -880,7 +1143,19 @@ APP_HTML = """<!doctype html>
         title: "Who can write into Bob's inbox?",
         problem: "Peer writes can change Bob's shared surface during a live demo.",
         evidence: "Appendable filter isolates peers that can write to read&append/.",
-        decision: "Review these peers before allowing live collaboration."
+        decision: "Review these peers before allowing live collaboration.",
+        question: "Bob: If I let friends collaborate live, who can write into my read&append/ area?",
+        dialogue: [
+          ["Bob", "Which friends can modify my shared surface during the demo?"],
+          ["Audit", "Use the Appendable matrix filter. It keeps only peers with append zones."],
+          ["Audit", "The append zone is read&append/. This does not mean they can write personal/."],
+          ["Bob", "Decision: review appendable peers before opening live collaboration."]
+        ],
+        checks: [
+          "Use the Appendable matrix filter.",
+          "Read Append zones for each remaining peer.",
+          "Inspect a peer if write access is surprising."
+        ]
       },
       {
         id: "inspect-carol",
@@ -888,7 +1163,19 @@ APP_HTML = """<!doctype html>
         title: "Can Carol join the project without seeing personal notes?",
         problem: "Bob wants Carol to see task files, but not personal/.",
         evidence: "Carol's peer audit shows task/ visible while personal/ stays hidden.",
-        decision: "Safe for project collaboration; not a personal-data grant."
+        decision: "Safe for project collaboration; not a personal-data grant.",
+        question: "Bob: Can Carol help with the project task without seeing my personal notes?",
+        dialogue: [
+          ["Bob", "Carol needs project context. Does task tier give enough without leaking personal/?"],
+          ["Audit", "Inspect Carol. The audit switches to peer mode and resolves Carol's tier from agents.json."],
+          ["Audit", "Carol can see read-only/, read&append/, and task/. personal/ does not appear in the visible listing."],
+          ["Bob", "Decision: Carol can join the project; this is not a personal-data grant."]
+        ],
+        checks: [
+          "Inspect Carol from the matrix.",
+          "Visible listing includes task/demo.md.",
+          "Visible listing does not include any personal/ paths."
+        ]
       },
       {
         id: "upgrade-trust",
@@ -896,7 +1183,19 @@ APP_HTML = """<!doctype html>
         title: "Should Bob promote Carol to personal?",
         problem: "A tier upgrade may expose private paths and ask context.",
         evidence: "Preview lists newly exposed paths and ask chunk delta before agents.json changes.",
-        decision: "Do not promote unless the newly exposed personal paths are intended."
+        decision: "Do not promote unless the newly exposed personal paths are intended.",
+        question: "Bob: What would become visible if I promoted Carol from task to personal?",
+        dialogue: [
+          ["Bob", "I am considering raising Carol's tier. What changes before I edit agents.json?"],
+          ["Audit", "Preview compares current task access with proposed personal access."],
+          ["Audit", "Newly exposed paths include personal/. The preview lists paths and ask chunk delta, not note contents."],
+          ["Bob", "Decision: do not promote unless those personal paths are intentionally shareable."]
+        ],
+        checks: [
+          "Run Preview for Carol.",
+          "Check New zones and New entries.",
+          "Confirm no SECRET file body appears in the UI."
+        ]
       }
     ];
     let selectedTier = "common";
@@ -937,6 +1236,7 @@ APP_HTML = """<!doctype html>
       els.runAudit.disabled = isBusy;
       els.loadPeers.disabled = isBusy;
       els.loadMatrix.disabled = isBusy;
+      els.planAsk.disabled = isBusy;
       document.querySelectorAll("[data-matrix-action]").forEach(button => {
         button.disabled = isBusy;
       });
@@ -963,7 +1263,39 @@ APP_HTML = """<!doctype html>
         </div>
       `).join("");
     }
-    function setScenarioState(id, text, cls = "info") {
+    function renderConversation(id) {
+      const scenario = SCENARIOS.find(item => item.id === id) || SCENARIOS[0];
+      if (!scenario) return;
+      els.conversationState.textContent = scenario.kicker;
+      els.conversationState.className = "badge info";
+      els.conversationQuestion.textContent = scenario.question;
+      els.conversationEvidence.innerHTML = scenario.checks.map(check => `
+        <li>${htmlEscape(check)}</li>
+      `).join("");
+      els.conversationTurns.innerHTML = scenario.dialogue.map(turn => `
+        <div class="dialogue-turn">
+          <div class="dialogue-speaker">${htmlEscape(turn[0])}</div>
+          <div class="dialogue-line">${htmlEscape(turn[1])}</div>
+        </div>
+      `).join("");
+    }
+    function scenarioQuestionForAsk(scenario) {
+      return (scenario.question || "").replace(/^Bob:\\s*/, "");
+    }
+    function renderAskDraft(title = "Question not planned", body = "-") {
+      els.askState.textContent = "draft";
+      els.askState.className = "badge info";
+      els.askReadiness.className = "ask-readiness blocked";
+      els.askReadiness.innerHTML = `<strong>${htmlEscape(title)}</strong><span class="muted">${htmlEscape(body)}</span>`;
+      els.askTarget.textContent = "-";
+      els.askContext.textContent = "-";
+      els.askEntries.textContent = "-";
+      els.askVisibleZones.innerHTML = "";
+      els.askHiddenZones.innerHTML = "";
+      els.askFindings.innerHTML = "";
+      els.askCommand.textContent = "";
+    }
+    function setScenarioState(id, text, cls = "info", options = {}) {
       activeScenario = id || "";
       const scenario = SCENARIOS.find(item => item.id === activeScenario);
       els.scenarioState.textContent = text || (scenario ? scenario.kicker : `${SCENARIOS.length} scenarios`);
@@ -971,6 +1303,13 @@ APP_HTML = """<!doctype html>
       document.querySelectorAll("[data-scenario-id]").forEach(item => {
         item.classList.toggle("active", item.dataset.scenarioId === activeScenario);
       });
+      if (scenario && options.syncAsk !== false) {
+        renderConversation(scenario.id);
+        els.askQuestion.value = scenarioQuestionForAsk(scenario);
+        renderAskDraft("Question ready", "Target context not checked yet.");
+      } else if (scenario) {
+        renderConversation(scenario.id);
+      }
     }
     function selectTier(tier) {
       const allowed = ["common", "task", "personal"];
@@ -1014,6 +1353,87 @@ APP_HTML = """<!doctype html>
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       return data;
+    }
+    async function apiPost(path, payload) {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+    function renderZonePills(target, zones, warnZones = new Set()) {
+      if (!zones.length) {
+        target.innerHTML = `<span class="badge info">none</span>`;
+        return;
+      }
+      target.innerHTML = zones.map(zone => {
+        const cls = warnZones.has(zone) || zone === "personal" ? "warn" : "info";
+        return `<span class="badge ${cls}">${htmlEscape(zone)}/</span>`;
+      }).join("");
+    }
+    function renderAskPlan(data) {
+      const plan = data.ask_plan;
+      const readiness = plan.readiness;
+      const badgeClass = readiness.level === "ready" ? "ok" : readiness.level === "warn" ? "warn" : "deny";
+      els.askState.textContent = readiness.state;
+      els.askState.className = `badge ${badgeClass}`;
+      els.askReadiness.className = `ask-readiness ${readiness.level === "ready" ? "ready" : readiness.level === "warn" ? "warn" : "blocked"}`;
+      els.askReadiness.innerHTML = `
+        <strong>${htmlEscape(readiness.title)}</strong>
+        <span class="muted">${htmlEscape(readiness.body)}</span>
+      `;
+      els.askTarget.textContent = plan.target_label;
+      els.askContext.textContent = `${plan.ask_context.chunks} chunks`;
+      els.askEntries.textContent = String(plan.visible_entry_count);
+      renderZonePills(els.askVisibleZones, plan.visible_zones);
+      renderZonePills(els.askHiddenZones, plan.hidden_zones, new Set(plan.mentioned_hidden_zones || []));
+      els.askFindings.innerHTML = plan.findings.map(item => `
+        <div class="risk ${item.level === "ready" ? "good-line" : item.level === "warn" ? "warn-line" : "danger-line"}">
+          <strong>${htmlEscape(item.title)}</strong>
+          <span class="muted">${htmlEscape(item.body)}</span>
+        </div>
+      `).join("");
+      els.askCommand.textContent = plan.command;
+    }
+    async function prepareAsk(options = {}) {
+      const manageBusy = options.manageBusy !== false;
+      const question = els.askQuestion.value.trim();
+      if (!question) {
+        renderAskDraft("Missing question", "Question text is empty.");
+        return false;
+      }
+      showError("");
+      if (!options.preserveStatus) setStatus("Planning ask");
+      els.askState.textContent = "planning";
+      els.askState.className = "badge warn";
+      if (manageBusy) setBusy(true);
+      const query = {
+        share: els.share.value,
+        agents_file: els.agentsFile.value,
+        path: els.path.value,
+        query: question,
+        mode: els.askMode.value
+      };
+      if (els.mode.value === "peer") query.peer_pubkey = els.peer.value;
+      else query.tier = selectedTier;
+      try {
+        const data = await apiPost("/api/ask-plan", query);
+        renderAskPlan(data);
+        if (!options.preserveStatus) setStatus("Ask plan ready");
+        return true;
+      } catch (err) {
+        renderAskDraft("Ask plan failed", err.message);
+        showError(err.message);
+        if (!options.preserveStatus) setStatus("Ask plan failed");
+        return false;
+      } finally {
+        if (manageBusy) setBusy(false);
+      }
     }
     async function loadPeers() {
       showError("");
@@ -1236,6 +1656,7 @@ APP_HTML = """<!doctype html>
         await runPreview();
         }
         await loadMatrix();
+        await prepareAsk({ manageBusy: false, preserveStatus: true });
         setStatus("Audit complete");
         return true;
       } catch (err) {
@@ -1262,6 +1683,12 @@ APP_HTML = """<!doctype html>
       }
     });
     els.loadPeers.addEventListener("click", loadPeers);
+    els.planAsk.addEventListener("click", () => {
+      prepareAsk();
+    });
+    els.askQuestion.addEventListener("input", () => {
+      renderAskDraft("Question changed", "Target context not checked yet.");
+    });
     els.loadMatrix.addEventListener("click", () => {
       showError("");
       setStatus("Loading matrix");
@@ -1359,7 +1786,8 @@ APP_HTML = """<!doctype html>
         } else {
           throw new Error("Unknown scenario");
         }
-        setScenarioState(id, "scenario ready", "ok");
+        await prepareAsk({ manageBusy: false, preserveStatus: true });
+        setScenarioState(id, "scenario ready", "ok", { syncAsk: false });
         setStatus("Scenario ready");
       } catch (err) {
         showError(err.message);
@@ -1370,12 +1798,15 @@ APP_HTML = """<!doctype html>
       }
     }
     els.scenarioList.addEventListener("click", event => {
+      const card = event.target.closest("[data-scenario-id]");
+      if (!card) return;
+      setScenarioState(card.dataset.scenarioId);
       const button = event.target.closest("[data-scenario-run]");
-      if (!button) return;
-      runScenario(button.dataset.scenarioRun);
+      if (button) runScenario(button.dataset.scenarioRun);
     });
     async function init() {
       renderScenarios();
+      setScenarioState("my-computer");
       const qs = new URLSearchParams(window.location.search);
       if (qs.has("share")) els.share.value = qs.get("share");
       if (qs.has("agents_file")) els.agentsFile.value = qs.get("agents_file");
@@ -1430,6 +1861,30 @@ def _html_response(handler: BaseHTTPRequestHandler, body: str) -> None:
     _security_headers(handler, html_page=True)
     handler.end_headers()
     handler.wfile.write(raw)
+
+
+def _json_body_as_qs(handler: BaseHTTPRequestHandler) -> Tuple[int, Dict]:
+    try:
+        length = int(handler.headers.get("Content-Length", "0"))
+    except ValueError:
+        return 400, {"ok": False, "error": "bad_content_length"}
+    if length <= 0:
+        return 400, {"ok": False, "error": "empty_body"}
+    if length > 65536:
+        return 413, {"ok": False, "error": "body_too_large"}
+    try:
+        raw = handler.rfile.read(length).decode("utf-8")
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return 400, {"ok": False, "error": "bad_json"}
+    if not isinstance(payload, dict):
+        return 400, {"ok": False, "error": "bad_json"}
+    qs = {
+        str(key): [str(value)]
+        for key, value in payload.items()
+        if value is not None
+    }
+    return 200, qs
 
 
 def _first(qs: Dict[str, list], key: str, default: str = "") -> str:
@@ -1599,6 +2054,165 @@ def _preview_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
     }
 
 
+_ASK_QUERY_LIMIT = 1000
+_ZONE_ALIASES = {
+    app_layer.ZONE_READONLY: ("read-only", "readonly", "public", "common"),
+    app_layer.ZONE_APPEND: ("read&append", "read-and-append", "append", "inbox", "write", "writable"),
+    app_layer.ZONE_TASK: ("task", "project", "work"),
+    app_layer.ZONE_PERSONAL: ("personal", "private", "secret", "diary"),
+}
+
+
+def _mentioned_zones(query: str) -> List[str]:
+    lowered = query.lower()
+    mentioned = []
+    for zone, aliases in _ZONE_ALIASES.items():
+        if any(alias in lowered for alias in aliases):
+            mentioned.append(zone)
+    return mentioned
+
+
+def _peer_label(peer: Dict[str, str]) -> str:
+    if peer.get("name"):
+        return peer["name"]
+    if peer.get("pubkey"):
+        return peer["pubkey"][:12] + "..."
+    return "explicit tier"
+
+
+def _ask_command(peer: Dict[str, str], mode: str, query: str) -> str:
+    pubkey = peer.get("pubkey", "")
+    if not pubkey:
+        return "Select a peer from agents.json to send this ask over p2p_node. Explicit tier is a local context preview."
+    compact_query = " ".join(query.split())
+    return (
+        "python3 p2p_node.py --port <bob-port> --name Bob "
+        "--server-ip <relay-ip> --server-port 9000 "
+        f"--peer-pubkey {shlex.quote(pubkey)} --op ask --mode {shlex.quote(mode)} "
+        f"--query {shlex.quote(compact_query)}"
+    )
+
+
+def _ask_plan_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
+    share = _first(qs, "share", "share")
+    agents_file = _first(qs, "agents_file", agents.DEFAULT_PATH)
+    tier = _first(qs, "tier", None)
+    peer_pubkey = _first(qs, "peer_pubkey", None)
+    path = _first(qs, "path", "")
+    query = _first(qs, "query", "").strip()
+    mode = _first(qs, "mode", app_layer.DEFAULT_ASK_MODE)
+    if not query:
+        return 400, {"ok": False, "error": "missing_query"}
+    if len(query) > _ASK_QUERY_LIMIT:
+        return 400, {"ok": False, "error": "query_too_long"}
+    if mode not in app_layer.ASK_MODES:
+        mode = app_layer.DEFAULT_ASK_MODE
+
+    try:
+        peer = share_audit.resolve_peer(peer_pubkey, agents_file, tier)
+        audit = share_audit.build_audit(share, peer["tier"], path)
+    except ValueError as e:
+        return 400, {"ok": False, "error": str(e)}
+
+    visible_zones = [zone["zone"] for zone in audit["zones"] if zone["visible"]]
+    hidden_zones = [zone["zone"] for zone in audit["zones"] if not zone["visible"]]
+    mentioned = _mentioned_zones(query)
+    mentioned_hidden = [zone for zone in mentioned if zone in hidden_zones]
+    chunk_count = audit["ask_context"]["text_chunks"]
+    byte_count = audit["ask_context"]["bytes"]
+    entry_count = len(audit["list"]["entries"]) if audit["list"]["ok"] else 0
+
+    findings = [{
+        "level": "ready",
+        "title": "Context scope",
+        "body": f"Ask can use {len(visible_zones)} visible zone(s), {entry_count} visible path(s), and {chunk_count} text chunk(s).",
+    }]
+    if hidden_zones:
+        findings.append({
+            "level": "ready",
+            "title": "Excluded zones",
+            "body": ", ".join(zone + "/" for zone in hidden_zones) + " will not be listed or included in ask context.",
+        })
+    if mentioned_hidden:
+        findings.append({
+            "level": "warn",
+            "title": "Question asks outside current tier",
+            "body": "Question mentions " + ", ".join(zone + "/" for zone in mentioned_hidden) + ", but this target cannot include those zones.",
+        })
+    if mode == "local":
+        findings.append({
+            "level": "warn",
+            "title": "Local synthesis mode",
+            "body": "The remote peer returns raw tier-filtered chunks to Bob; hidden tiers still stay excluded.",
+        })
+    else:
+        findings.append({
+            "level": "ready",
+            "title": "Remote answer mode",
+            "body": "The remote peer answers with its own local AI and returns the answer, not raw chunks.",
+        })
+    findings.append({
+        "level": "ready",
+        "title": "Dashboard exposure",
+        "body": "This planner returns paths, counts, zones, and command text only; it does not return file bodies.",
+    })
+
+    if chunk_count <= 0:
+        readiness = {
+            "level": "blocked",
+            "state": "ask blocked",
+            "title": "No ask context",
+            "body": "This target has no text chunks available for the question.",
+        }
+    elif mentioned_hidden or mode == "local":
+        readiness = {
+            "level": "warn",
+            "state": "ask constrained",
+            "title": "Ask needs review",
+            "body": "The question is valid, but the context boundary or mode changes what Bob receives.",
+        }
+    else:
+        readiness = {
+            "level": "ready",
+            "state": "ask ready",
+            "title": "Ready to ask",
+            "body": "The question has tier-filtered context and no hidden-zone mismatch.",
+        }
+
+    return 200, {
+        "ok": True,
+        "peer": peer,
+        "ask_plan": {
+            "question": query,
+            "mode": mode,
+            "target_label": f"{_peer_label(peer)} · {audit['tier']}",
+            "tier": audit["tier"],
+            "path": path,
+            "visible_zones": visible_zones,
+            "hidden_zones": hidden_zones,
+            "mentioned_zones": mentioned,
+            "mentioned_hidden_zones": mentioned_hidden,
+            "visible_entry_count": entry_count,
+            "ask_context": {
+                "chunks": chunk_count,
+                "bytes": byte_count,
+                "limit_bytes": audit["ask_context"]["limit_bytes"],
+                "content_included": False,
+            },
+            "readiness": readiness,
+            "findings": findings,
+            "command": _ask_command(peer, mode, query),
+            "request_preview": {
+                "op": "ask",
+                "mode": mode,
+                "query": query,
+                "peer_pubkey": peer.get("pubkey", ""),
+                "tier": audit["tier"],
+            },
+        },
+    }
+
+
 def _matrix_payload(qs: Dict[str, list]) -> Tuple[int, Dict]:
     share = _first(qs, "share", "share")
     agents_file = _first(qs, "agents_file", agents.DEFAULT_PATH)
@@ -1702,6 +2316,27 @@ class AuditHandler(BaseHTTPRequestHandler):
             if "agents_file" not in qs:
                 qs["agents_file"] = [self.default_agents_file]
             status, payload = _matrix_payload(qs)
+            _json_response(self, status, payload)
+            return
+        _json_response(self, 404, {"ok": False, "error": "not_found"})
+
+    def do_POST(self) -> None:
+        host = _host_from_header(self.headers.get("Host", ""))
+        if host and host not in self.allowed_hosts and not _is_loopback_host(host):
+            _json_response(self, 403, {"ok": False, "error": "host_not_allowed"})
+            return
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/ask-plan":
+            status, qs_or_payload = _json_body_as_qs(self)
+            if status != 200:
+                _json_response(self, status, qs_or_payload)
+                return
+            qs = qs_or_payload
+            if "share" not in qs:
+                qs["share"] = [self.default_share]
+            if "agents_file" not in qs:
+                qs["agents_file"] = [self.default_agents_file]
+            status, payload = _ask_plan_payload(qs)
             _json_response(self, status, payload)
             return
         _json_response(self, 404, {"ok": False, "error": "not_found"})
