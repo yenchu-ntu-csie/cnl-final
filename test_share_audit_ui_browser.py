@@ -233,6 +233,10 @@ def _page_state(cdp):
           selfHost: document.querySelector('#selfHost')?.textContent,
           selfFriendCount: document.querySelector('#selfFriendCount')?.textContent,
           importZoneCount: document.querySelectorAll('#importZones .import-zone').length,
+          scenarioState: document.querySelector('#scenarioState')?.textContent,
+          scenarioCount: document.querySelectorAll('[data-scenario-run]').length,
+          activeScenario: document.querySelector('.scenario-item.active')?.dataset.scenarioId || '',
+          scenarioPanelText: document.querySelector('[data-testid="scenario-panel"]')?.innerText || '',
           hasProfile: document.body.innerText.includes('read-only/profile.md'),
           hasTask: document.body.innerText.includes('task/demo.md'),
           hasPersonalPath: document.body.innerText.includes('personal/diary.md'),
@@ -243,6 +247,7 @@ def _page_state(cdp):
           matrixState: document.querySelector('#matrixState')?.textContent,
           matrixRowCount: document.querySelectorAll('#matrixRows tr').length,
           matrixText: document.querySelector('#matrixRows')?.innerText || '',
+          matrixActiveFilter: document.querySelector('[data-matrix-filter].primary-mini')?.dataset.matrixFilter || '',
           matrixPersonalRows: document.querySelectorAll('.matrix-row-personal').length,
           matrixHasPersonalPath: document.querySelector('#matrixRows')?.innerText.includes('personal/diary.md') || false,
           matrixHasUndefined: document.querySelector('#matrixRows')?.innerText.includes('undefined') || false,
@@ -254,6 +259,23 @@ def _page_state(cdp):
           overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth
         }))()"""
     )
+
+
+def _run_scenario(cdp, scenario_id):
+    cdp.eval(f"document.querySelector('[data-scenario-run=\"{scenario_id}\"]').click();")
+    deadline = time.time() + 8
+    state = None
+    while time.time() < deadline:
+        state = _page_state(cdp)
+        if (
+            state["status"] == "Scenario ready"
+            and state["activeScenario"] == scenario_id
+            and state["scenarioState"] == "scenario ready"
+        ):
+            assert state["hasSecretContent"] is False, state
+            return state
+        time.sleep(0.1)
+    raise AssertionError(f"scenario {scenario_id!r} did not become ready: {state}")
 
 
 def _screenshot(cdp, path):
@@ -289,6 +311,9 @@ def main():
         assert "local-only" in common["selfPanelText"], common
         assert "read-only/" in common["selfPanelText"], common
         assert "personal/" in common["selfPanelText"], common
+        assert common["scenarioCount"] == 5, common
+        assert "My computer" in common["scenarioPanelText"], common
+        assert "What if I upgrade trust?" in common["scenarioPanelText"], common
         self_png = os.path.join(work, "share-audit-self.png")
         _screenshot(cdp, self_png)
         assert common["visibleZones"] == "2", common
@@ -377,6 +402,36 @@ def main():
         assert filtered_action["previewTier"] == "personal → personal", filtered_action
         assert filtered_action["hasSecretContent"] is False, filtered_action
 
+        scenario_self = _run_scenario(cdp, "my-computer")
+        assert scenario_self["mode"] == "tier", scenario_self
+        assert scenario_self["tier"] == "tier: common", scenario_self
+        assert scenario_self["visibleZones"] == "2", scenario_self
+        assert scenario_self["hasTask"] is False, scenario_self
+
+        scenario_matrix = _run_scenario(cdp, "who-trust")
+        assert scenario_matrix["matrixActiveFilter"] == "all", scenario_matrix
+        assert scenario_matrix["matrixState"] == "2 peers", scenario_matrix
+        assert "Carol" in scenario_matrix["matrixText"], scenario_matrix
+        assert "Dave" in scenario_matrix["matrixText"], scenario_matrix
+
+        scenario_write = _run_scenario(cdp, "who-can-write")
+        assert scenario_write["matrixActiveFilter"] == "appendable", scenario_write
+        assert scenario_write["matrixState"] == "2/2 peers", scenario_write
+        assert scenario_write["matrixHasPersonalPath"] is False, scenario_write
+
+        scenario_inspect = _run_scenario(cdp, "inspect-carol")
+        assert scenario_inspect["mode"] == "peer", scenario_inspect
+        assert scenario_inspect["selectedPeer"].startswith("Carol"), scenario_inspect
+        assert scenario_inspect["tier"] == "tier: task", scenario_inspect
+        assert scenario_inspect["hasTask"] is True, scenario_inspect
+        assert scenario_inspect["hasPersonalPath"] is False, scenario_inspect
+
+        scenario_preview = _run_scenario(cdp, "upgrade-trust")
+        assert scenario_preview["mode"] == "peer", scenario_preview
+        assert scenario_preview["selectedPeer"].startswith("Carol"), scenario_preview
+        assert scenario_preview["previewTier"] == "task → personal", scenario_preview
+        assert scenario_preview["previewHasPersonal"] is True, scenario_preview
+
         cdp.send("Emulation.setDeviceMetricsOverride", {
             "width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True,
         })
@@ -395,6 +450,7 @@ def main():
         print("✅ browser peer flow loads Carol from agents.json")
         print("✅ browser peer matrix lists all peers and highlights personal tier")
         print("✅ browser trust preview shows newly exposed personal paths without contents")
+        print("✅ browser scenario walkthrough drives self, matrix, write-risk, inspect, and preview flows")
         print("✅ mobile viewport has no horizontal overflow")
         print(f"SELF_SCREENSHOT={self_png}")
         print(f"MATRIX_SCREENSHOT={matrix_png}")

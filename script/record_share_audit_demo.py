@@ -81,6 +81,11 @@ def _scroll_to(cdp, selector, label, frames_dir, frame_no, seconds=1.2, fps=8):
     return _capture_hold(cdp, frames_dir, frame_no, seconds, fps)
 
 
+def _run_scenario(cdp, scenario_id):
+    cdp.eval(f"document.querySelector('[data-scenario-run=\"{scenario_id}\"]').click();")
+    _wait_status(cdp, "Scenario ready")
+
+
 def _encode_video(frames_dir, output, fps):
     os.makedirs(os.path.dirname(output), exist_ok=True)
     cmd = [
@@ -135,46 +140,29 @@ def record(output, fps=8, keep_frames=False):
         })
         _wait_status(cdp)
 
-        _set_scene_label(cdp, "Bob's local computer: self-audit and import zones")
-        frame_no = _capture_hold(cdp, frames_dir, frame_no, 2.0, fps)
+        _set_scene_label(cdp, "Start with Bob's scenario cards")
+        frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.6, fps)
 
-        frame_no = _scroll_to(
-            cdp,
-            "[data-testid='peer-matrix-panel']",
-            "Friend matrix: who can see which zones, without file contents",
-            frames_dir,
-            frame_no,
-            1.8,
-            fps,
-        )
-
-        cdp.eval("document.querySelector('[data-matrix-filter=\"personal\"]').click();")
-        _set_scene_label(cdp, "Filter to higher-risk personal-tier friends")
-        frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.5, fps)
-
-        cdp.eval("document.querySelector('[data-matrix-filter=\"all\"]').click();")
-        cdp.eval("document.querySelector('[data-tier=\"task\"]').click(); document.querySelector('#runAudit').click();")
-        _wait_status(cdp)
-        _set_scene_label(cdp, "Switch tier: task data appears, personal data stays hidden")
+        _run_scenario(cdp, "my-computer")
+        _set_scene_label(cdp, "Scenario 1: Bob audits this computer, not a central server")
         frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.8, fps)
 
-        cdp.eval("document.querySelector('[data-matrix-action=\"inspect\"][data-row-index=\"0\"]').click();")
-        _wait_status(cdp, "Peer audit complete")
-        _set_scene_label(cdp, "Inspect Carol: audit a concrete friend from agents.json")
+        _run_scenario(cdp, "who-trust")
+        _set_scene_label(cdp, "Scenario 2: Bob sees who is in local agents.json")
         frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.8, fps)
 
-        cdp.eval("document.querySelector('[data-matrix-action=\"preview\"][data-row-index=\"0\"]').click();")
-        _wait_status(cdp, "Preview ready")
+        _run_scenario(cdp, "who-can-write")
+        _set_scene_label(cdp, "Scenario 3: Bob filters peers who can write into read&append/")
+        frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.8, fps)
+
+        _run_scenario(cdp, "inspect-carol")
+        _set_scene_label(cdp, "Scenario 4: inspect a project friend right now")
+        frame_no = _capture_hold(cdp, frames_dir, frame_no, 1.8, fps)
+
+        _run_scenario(cdp, "upgrade-trust")
         _page_state(cdp)
-        frame_no = _scroll_to(
-            cdp,
-            "#previewPanel",
-            "Preview before changing trust: newly exposed paths only, never contents",
-            frames_dir,
-            frame_no,
-            2.2,
-            fps,
-        )
+        _set_scene_label(cdp, "Scenario 5: preview newly exposed paths before changing trust")
+        frame_no = _capture_hold(cdp, frames_dir, frame_no, 2.2, fps)
 
         _encode_video(frames_dir, output, fps)
         if keep_frames:

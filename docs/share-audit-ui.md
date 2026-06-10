@@ -8,6 +8,18 @@ python3 share_audit_server.py --share share --agents-file agents.json
 
 Open the printed `http://127.0.0.1:...` URL. The server is local by default and the UI/API return paths and counts only, never file contents. It is meant to run beside Bob's own `share/` and `agents.json`, not as a central audit service.
 
+## Bob Scenario Walkthrough
+
+Use the scenario cards at the top of the dashboard when the raw audit controls are too abstract. Each card is a local preset over the same content-free audit APIs:
+
+- `My computer`: shows Bob's local self-audit and runs the common-tier audit.
+- `Who do I trust?`: loads every peer from Bob's local `agents.json` into the exposure matrix.
+- `Who can write?`: filters the matrix to peers with append access to `read&append/`.
+- `Inspect a project friend`: selects a task-level peer and runs that peer's current audit.
+- `What if I upgrade trust?`: previews the next trust tier before editing `agents.json`.
+
+The cards do not create a central scenario service and do not read note contents. They only set existing controls, call the existing local endpoints, and scroll to the relevant panel.
+
 ## This Computer Self-Audit
 
 The first panel describes the local node view:

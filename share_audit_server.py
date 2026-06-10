@@ -395,6 +395,47 @@ APP_HTML = """<!doctype html>
       gap: 6px;
       margin-bottom: 10px;
     }
+    .scenario-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .scenario-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      min-height: 128px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .scenario-item.active {
+      border-color: #7bb7df;
+      box-shadow: inset 0 0 0 1px #b8d7ee;
+    }
+    .scenario-copy {
+      min-width: 0;
+    }
+    .scenario-kicker {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .scenario-title {
+      margin-top: 5px;
+      font-size: 15px;
+      font-weight: 760;
+      line-height: 1.25;
+    }
+    .scenario-body {
+      margin-top: 7px;
+      color: #435262;
+      font-size: 13px;
+      line-height: 1.4;
+    }
     .zone-pills {
       display: flex;
       flex-wrap: wrap;
@@ -487,6 +528,7 @@ APP_HTML = """<!doctype html>
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .self-grid { grid-template-columns: 1fr; }
       .import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .scenario-list { grid-template-columns: 1fr; }
       .grid2 { grid-template-columns: 1fr; }
       .preview-grid { grid-template-columns: 1fr; }
     }
@@ -603,6 +645,15 @@ APP_HTML = """<!doctype html>
       </aside>
       <section class="workspace">
         <div class="panel error" id="error"></div>
+        <section class="panel" data-testid="scenario-panel">
+          <div class="panel-head">
+            <h2>Bob Scenario Walkthrough</h2>
+            <span class="badge info" id="scenarioState">5 scenarios</span>
+          </div>
+          <div class="panel-body">
+            <div class="scenario-list" id="scenarioList"></div>
+          </div>
+        </section>
         <section class="panel" data-testid="self-audit-panel">
           <div class="panel-head">
             <h2>This Computer Self-Audit</h2>
@@ -784,17 +835,52 @@ APP_HTML = """<!doctype html>
       selfFriendCount: document.getElementById("selfFriendCount"),
       selfShare: document.getElementById("selfShare"),
       importZones: document.getElementById("importZones"),
+      scenarioList: document.getElementById("scenarioList"),
+      scenarioState: document.getElementById("scenarioState"),
       matrixState: document.getElementById("matrixState"),
       matrixRows: document.getElementById("matrixRows"),
       runAudit: document.getElementById("runAudit"),
       loadPeers: document.getElementById("loadPeers"),
       loadMatrix: document.getElementById("loadMatrix")
     };
+    const SCENARIOS = [
+      {
+        id: "my-computer",
+        kicker: "Scenario 1",
+        title: "My computer",
+        body: "Bob checks this local node first: share zones, friend count, and what common peers can see."
+      },
+      {
+        id: "who-trust",
+        kicker: "Scenario 2",
+        title: "Who do I trust?",
+        body: "Bob loads the friend matrix from agents.json and compares every peer without exposing note contents."
+      },
+      {
+        id: "who-can-write",
+        kicker: "Scenario 3",
+        title: "Who can write?",
+        body: "Bob filters appendable peers before the live demo, because read&append/ accepts peer writes."
+      },
+      {
+        id: "inspect-carol",
+        kicker: "Scenario 4",
+        title: "Inspect a project friend",
+        body: "Bob opens a task-level peer audit to see what that friend can read right now."
+      },
+      {
+        id: "upgrade-trust",
+        kicker: "Scenario 5",
+        title: "What if I upgrade trust?",
+        body: "Bob previews the next tier before editing agents.json, showing newly exposed paths only."
+      }
+    ];
     let selectedTier = "common";
     let peerTiers = {};
     let matrixRows = [];
     let visibleMatrixRows = [];
     let matrixFilter = "all";
+    let activeScenario = "";
 
     function setStatus(text) { els.status.textContent = text; }
     function showError(text) {
@@ -833,6 +919,30 @@ APP_HTML = """<!doctype html>
       document.querySelectorAll("[data-matrix-filter]").forEach(button => {
         button.disabled = isBusy;
       });
+      document.querySelectorAll("[data-scenario-run]").forEach(button => {
+        button.disabled = isBusy;
+      });
+    }
+    function renderScenarios() {
+      els.scenarioList.innerHTML = SCENARIOS.map(scenario => `
+        <div class="scenario-item" data-scenario-id="${htmlEscape(scenario.id)}">
+          <div class="scenario-copy">
+            <div class="scenario-kicker">${htmlEscape(scenario.kicker)}</div>
+            <div class="scenario-title">${htmlEscape(scenario.title)}</div>
+            <div class="scenario-body">${htmlEscape(scenario.body)}</div>
+          </div>
+          <button class="mini-button primary-mini" type="button" data-scenario-run="${htmlEscape(scenario.id)}">Run</button>
+        </div>
+      `).join("");
+    }
+    function setScenarioState(id, text, cls = "info") {
+      activeScenario = id || "";
+      const scenario = SCENARIOS.find(item => item.id === activeScenario);
+      els.scenarioState.textContent = text || (scenario ? scenario.kicker : `${SCENARIOS.length} scenarios`);
+      els.scenarioState.className = `badge ${cls}`;
+      document.querySelectorAll("[data-scenario-id]").forEach(item => {
+        item.classList.toggle("active", item.dataset.scenarioId === activeScenario);
+      });
     }
     function selectTier(tier) {
       const allowed = ["common", "task", "personal"];
@@ -853,6 +963,21 @@ APP_HTML = """<!doctype html>
     function setProposedTier(tier) {
       const allowed = ["common", "task", "personal"];
       if (allowed.includes(tier)) els.proposedTier.value = tier;
+    }
+    function firstPeer() {
+      return Object.keys(peerTiers)[0] || "";
+    }
+    function firstPeerByTier(tier) {
+      return Object.keys(peerTiers).find(pubkey => peerTiers[pubkey] === tier) || "";
+    }
+    function firstPeerExceptTier(tier) {
+      return Object.keys(peerTiers).find(pubkey => peerTiers[pubkey] !== tier) || "";
+    }
+    async function ensurePeersForScenario() {
+      if (!Object.keys(peerTiers).length) await loadPeers();
+      const pubkey = firstPeer();
+      if (!pubkey) throw new Error("No peers in agents file for this scenario");
+      return pubkey;
     }
     async function apiGet(path, query) {
       const res = await fetch(`${path}?${params(query)}`);
@@ -1080,13 +1205,15 @@ APP_HTML = """<!doctype html>
         if (options.skipPreview) {
           els.previewPanel.hidden = true;
         } else {
-          await runPreview();
+        await runPreview();
         }
         await loadMatrix();
         setStatus("Audit complete");
+        return true;
       } catch (err) {
         showError(err.message);
         setStatus("Audit failed");
+        return false;
       } finally {
         setBusy(false);
       }
@@ -1129,7 +1256,8 @@ APP_HTML = """<!doctype html>
         if (!peerTiers[pubkey]) await loadPeers();
         els.peer.value = pubkey;
         updateProposedTier();
-        await runAudit({ skipPreview: action === "inspect" });
+        const ok = await runAudit({ skipPreview: action === "inspect" });
+        if (!ok) return;
         const target = action === "preview"
           ? els.previewPanel
           : document.querySelector("#fileList").closest(".panel");
@@ -1156,7 +1284,70 @@ APP_HTML = """<!doctype html>
       });
     });
     els.runAudit.addEventListener("click", runAudit);
+    async function runScenario(id) {
+      showError("");
+      setScenarioState(id, "running", "warn");
+      setStatus("Scenario running");
+      setBusy(true);
+      try {
+        els.path.value = "";
+        if (id === "my-computer") {
+          els.mode.value = "tier";
+          setMode();
+          selectTier("common");
+          const ok = await runAudit({ skipPreview: true });
+          if (!ok) throw new Error(els.error.textContent || "Scenario audit failed");
+          document.querySelector("[data-testid='self-audit-panel']").scrollIntoView({ block: "start" });
+        } else if (id === "who-trust") {
+          matrixFilter = "all";
+          await loadSelf();
+          await loadMatrix();
+          document.querySelector("[data-testid='peer-matrix-panel']").scrollIntoView({ block: "start" });
+        } else if (id === "who-can-write") {
+          matrixFilter = "appendable";
+          await loadSelf();
+          await loadMatrix();
+          document.querySelector("[data-testid='peer-matrix-panel']").scrollIntoView({ block: "start" });
+        } else if (id === "inspect-carol") {
+          els.mode.value = "peer";
+          setMode();
+          await ensurePeersForScenario();
+          const pubkey = firstPeerByTier("task") || firstPeerExceptTier("personal") || firstPeer();
+          els.peer.value = pubkey;
+          updateProposedTier();
+          const ok = await runAudit({ skipPreview: true });
+          if (!ok) throw new Error(els.error.textContent || "Scenario audit failed");
+          document.querySelector("#fileList").closest(".panel").scrollIntoView({ block: "start" });
+        } else if (id === "upgrade-trust") {
+          els.mode.value = "peer";
+          setMode();
+          await ensurePeersForScenario();
+          const pubkey = firstPeerByTier("task") || firstPeerExceptTier("personal") || firstPeer();
+          els.peer.value = pubkey;
+          updateProposedTier();
+          const ok = await runAudit();
+          if (!ok) throw new Error(els.error.textContent || "Scenario audit failed");
+          els.previewPanel.scrollIntoView({ block: "start" });
+        } else {
+          throw new Error("Unknown scenario");
+        }
+        setScenarioState(id, "scenario ready", "ok");
+        setStatus("Scenario ready");
+      } catch (err) {
+        showError(err.message);
+        setScenarioState(id, "scenario failed", "deny");
+        setStatus("Scenario failed");
+      } finally {
+        setBusy(false);
+      }
+    }
+    els.scenarioList.addEventListener("click", event => {
+      const button = event.target.closest("[data-scenario-run]");
+      if (!button) return;
+      runScenario(button.dataset.scenarioRun);
+    });
     async function init() {
+      renderScenarios();
       const qs = new URLSearchParams(window.location.search);
       if (qs.has("share")) els.share.value = qs.get("share");
       if (qs.has("agents_file")) els.agentsFile.value = qs.get("agents_file");

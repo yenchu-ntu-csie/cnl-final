@@ -1791,3 +1791,154 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git add logs/codex_iteration_log.md && git commit -m "Log demo video publish details" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Purpose: publish this append-only record of the successful demo-video commit and push.
+
+## 2026-06-10 20:14 CST - Bob Scenario Walkthrough Iteration
+
+### User-facing goal
+- The previous demo video was hard to understand. Add a few product scenarios so the UI tells a Bob-centered story and the demo video can follow those scenarios instead of raw controls.
+
+### Tool: `tool_search.tool_search_tool`
+- Query: `multi-agent spawn send input wait agent perpetual subagent`
+- Result: found available multi-agent tools for continuing the requested docs/implementation cross-check pattern.
+
+### Tool: `multi_tool_use.parallel`
+- Tools:
+  - `multi_agent_v1.resume_agent` for docs/understanding agent `019ea14d-5b44-7733-a597-6e630778810b`
+  - `multi_agent_v1.resume_agent` for implementation/cross-check agent `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: both resume calls returned `pending_init`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `rg -n "scenario|self-audit|matrix|preview|render|DOMContentLoaded|const state|function" share_audit_server.py`
+  - `sed -n '1,220p' test_share_audit_server.py`
+  - `sed -n '220,520p' test_share_audit_server.py`
+  - `sed -n '1,220p' docs/share-audit-ui.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Located the self-audit, matrix, preview, browser hooks, and documentation extension points.
+
+### Tool: `multi_tool_use.parallel`
+- Tools:
+  - `multi_agent_v1.send_input` to docs/understanding agent
+  - `multi_agent_v1.send_input` to implementation/cross-check agent
+- Result: queued scenario UX copy review and implementation/security risk review while main implementation proceeded locally.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `sed -n '300,760p' share_audit_server.py`
+  - `sed -n '760,1165p' share_audit_server.py`
+  - `sed -n '1165,1510p' share_audit_server.py`
+  - `sed -n '240,430p' test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Reviewed HTML/CSS/JS structure and browser test flow before editing.
+
+### Tool: `functions.apply_patch`
+- Path: `share_audit_server.py`
+- Result: first large patch attempt failed because the JS insertion context near the event handlers did not match exactly. No file changes were applied by that failed attempt.
+
+### Subagent result: docs/understanding
+- Agent: `019ea14d-5b44-7733-a597-6e630778810b`
+- Result: recommended a visible scenario strip over existing panels, with Bob-centered stories: local self-audit, trust matrix, inspect Carol, preview raising trust, and append/write risk.
+
+### Subagent result: implementation/cross-check
+- Agent: `019ea14d-bdcd-79a2-98ee-2f61ad79c5f0`
+- Result: no blockers. Recommended keeping scenarios client-side over existing APIs, preserving content-free constraints, disabling scenario buttons during busy state, using escaped static scenario IDs, avoiding row-index coupling, and adding browser hooks/tests.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `nl -ba share_audit_server.py | sed -n '460,620p'`
+  - `nl -ba share_audit_server.py | sed -n '620,820p'`
+  - `nl -ba share_audit_server.py | sed -n '820,1185p'`
+  - `git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed branch state and exact insertion points for smaller patches.
+
+### Tool: `functions.apply_patch`
+- Paths:
+  - `share_audit_server.py`
+  - `test_share_audit_server.py`
+  - `test_share_audit_ui_browser.py`
+  - `docs/share-audit-ui.md`
+  - `script/record_share_audit_demo.py`
+- Result: added `Bob Scenario Walkthrough` UI with five scenario cards, scenario JS state/actions, busy-state disabling, scenario-driven browser tests, docs, and scenario-driven demo recording flow.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+  - `git diff --stat`
+  - `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Syntax and whitespace checks passed. Diff at this stage included docs, recorder, server, API test, and browser UI test.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. Sandbox blocked binding local `127.0.0.1` test server with `PermissionError: [Errno 1] Operation not permitted`.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local loopback test server.
+- Result: exit 0. API/HTML tests passed, including stable scenario hooks and content-free API behavior.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server and headless Chrome.
+- Result: exit 1. Browser test caught a real state bug: clicking a new scenario could observe stale `Scenario ready` status before `scenarioState` finished updating.
+
+### Tool: `functions.apply_patch`
+- Paths:
+  - `share_audit_server.py`
+  - `test_share_audit_ui_browser.py`
+- Result: fixed scenario start state by setting status to `Scenario running`, and made the browser helper wait for the active scenario ID and `scenario ready` badge rather than stale global status alone.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+  - `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for both commands after the scenario-state fix.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server and headless Chrome.
+- Result: exit 0. Real browser test passed. It clicked all five scenarios, verified content-free behavior, matrix filters, inspect/preview flows, and mobile no-overflow. Screenshots were written under `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_yph9p0ks/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_yph9p0ks/share-audit-self.png`
+- Result: visually inspected the first viewport. Scenario cards are visible above the self-audit panel and are laid out in readable desktop cards.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server, headless Chrome, and ffmpeg.
+- Result: exit 0. Replaced `demo/artifacts/share-audit-demo.mp4` with a scenario-driven recording, `85` frames.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `ls -lh demo/artifacts/share-audit-demo.mp4`
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit.py`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_security.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Video is `246K`, H.264, `1366x768`, `8/1` fps, `10.625000` seconds. Core exposure-audit tests and security tests passed.
+
+### Tool: `functions.exec_command`
+- Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Timestamped this log entry as `2026-06-10 20:14:51 CST`.
+
+### Tool call error
+- Tool: `functions.exec_command`
+- Result: one attempted `tail -n 40 logs/codex_iteration_log.md` call used malformed JSON arguments and did not execute. A corrected tail command was run immediately afterward.
+
+### Tool: `functions.exec_command`
+- Command: `tail -n 40 logs/codex_iteration_log.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Reviewed log tail before appending this scenario iteration.
+
+### Planned final publish command for this iteration
+- Command: `git add docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py demo/artifacts/share-audit-demo.mp4 && git diff --cached --stat && git diff --cached --check && git commit -m "Add scenario walkthrough to audit UI" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish the scenario UI, tests, docs, updated demo video, and this append-only log entry.
