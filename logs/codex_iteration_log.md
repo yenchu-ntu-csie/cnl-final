@@ -1702,3 +1702,67 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git commit -m "Add local self-audit dashboard panel" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Created commit `4c6c33a`, pushed branch from `15487a0` to `4c6c33a`, and confirmed clean tracking status.
+
+## 2026-06-10 19:54 CST - Demo Video Recording Iteration
+
+### User-facing goal
+- Save a real browser-driven demo video for the local/per-user share-audit UI, so the demo is durable in the repo rather than living only as temporary screenshots.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `pwd`
+  - `git status --short --branch`
+  - `rg --files`
+  - `which ffmpeg`
+- Workdir: `/Users/user0/code/CNLab/Final` and `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed repo path, clean branch at `codex/ui-ux-10x-20260607`, available project files, and `/opt/homebrew/bin/ffmpeg`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `sed -n '1,260p' test_share_audit_ui_browser.py`
+  - `sed -n '260,520p' test_share_audit_ui_browser.py`
+  - `ls -la`
+  - `find .. -name AGENTS.md -print`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Reviewed the browser UI test helpers to reuse its local dashboard, CDP, screenshot, and seed-data flow for recording.
+
+### Tool: `functions.exec_command`
+- Command: `sed -n '1,220p' .gitignore`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Confirmed `demo/artifacts/` is not ignored, so the requested video can be saved in the repo.
+
+### Tool: `functions.apply_patch`
+- Path: `script/record_share_audit_demo.py`
+- Result: added a dependency-free recorder that starts the dashboard, drives headless Chrome through self-audit, matrix, filter, inspect, and preview flows, captures PNG frames, and encodes `demo/artifacts/share-audit-demo.mp4` with ffmpeg.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile script/record_share_audit_demo.py`
+  - `git diff -- script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Recorder syntax check passed. The diff command showed no tracked diff because the script was still untracked.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 1. Sandbox blocked binding the local `127.0.0.1` dashboard server with `PermissionError: [Errno 1] Operation not permitted`.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server, headless Chrome, and ffmpeg video output.
+- Result: exit 0. Recorded `87` frames and saved `/Users/user0/code/CNLab/Final/cnl-final/demo/artifacts/share-audit-demo.mp4`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `ls -lh demo/artifacts/share-audit-demo.mp4`
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `tail -n 80 logs/codex_iteration_log.md`
+  - `git status --short`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed video size `229K`, codec `h264`, resolution `1366x768`, frame rate `8/1`, and duration `10.875000`.
+
+### Tool: `functions.exec_command`
+- Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Timestamped this log entry as `2026-06-10 19:54:15 CST`.
