@@ -1766,3 +1766,28 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Result: exit 0. Timestamped this log entry as `2026-06-10 19:54:15 CST`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `git status --short --branch`
+  - `git diff --stat`
+  - `git diff --check`
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed pending changes were the log, recorder script, and demo artifact; whitespace and syntax checks passed.
+
+### Tool: `functions.exec_command`
+- Command: `git add logs/codex_iteration_log.md script/record_share_audit_demo.py demo/artifacts/share-audit-demo.mp4 && git diff --cached --stat && git diff --cached --check && git commit -m "Add share audit demo video" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 128 after successful local commit. Created commit `b514dd5` with `demo/artifacts/share-audit-demo.mp4`, `script/record_share_audit_demo.py`, and the log entry, but `git push` failed in sandbox DNS with `Could not resolve hostname github.com`.
+
+### Tool: `functions.exec_command`
+- Command: `git push`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for GitHub network access after sandbox DNS failure.
+- Result: exit 0. Pushed `codex/ui-ux-10x-20260607` from `60d54f1` to `b514dd5`.
+
+### Planned final publish command for this log-only update
+- Command: `git add logs/codex_iteration_log.md && git commit -m "Log demo video publish details" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish this append-only record of the successful demo-video commit and push.
