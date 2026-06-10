@@ -312,8 +312,11 @@ def main():
         assert "read-only/" in common["selfPanelText"], common
         assert "personal/" in common["selfPanelText"], common
         assert common["scenarioCount"] == 5, common
-        assert "My computer" in common["scenarioPanelText"], common
-        assert "What if I upgrade trust?" in common["scenarioPanelText"], common
+        assert "Problem:" in common["scenarioPanelText"], common
+        assert "Evidence:" in common["scenarioPanelText"], common
+        assert "Decision:" in common["scenarioPanelText"], common
+        assert "Can Bob demo safely from this laptop?" in common["scenarioPanelText"], common
+        assert "Should Bob promote Carol to personal?" in common["scenarioPanelText"], common
         self_png = os.path.join(work, "share-audit-self.png")
         _screenshot(cdp, self_png)
         assert common["visibleZones"] == "2", common

@@ -436,6 +436,20 @@ APP_HTML = """<!doctype html>
       font-size: 13px;
       line-height: 1.4;
     }
+    .scenario-lines {
+      display: grid;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .scenario-lines div {
+      color: #435262;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .scenario-lines strong {
+      color: #19212a;
+      font-weight: 760;
+    }
     .zone-pills {
       display: flex;
       flex-wrap: wrap;
@@ -847,32 +861,42 @@ APP_HTML = """<!doctype html>
       {
         id: "my-computer",
         kicker: "Scenario 1",
-        title: "My computer",
-        body: "Bob checks this local node first: share zones, friend count, and what common peers can see."
+        title: "Can Bob demo safely from this laptop?",
+        problem: "Bob must prove the audit is local before starting the node.",
+        evidence: "Self-audit shows this computer, local share zones, friend count, and common-tier exposure.",
+        decision: "Run the demo from this machine; do not treat audit as a central service."
       },
       {
         id: "who-trust",
         kicker: "Scenario 2",
-        title: "Who do I trust?",
-        body: "Bob loads the friend matrix from agents.json and compares every peer without exposing note contents."
+        title: "Who is actually in Bob's trust list?",
+        problem: "Bob needs to know which peers his node will accept before the demo.",
+        evidence: "The matrix reads Bob's local agents.json and compares peer tiers without note contents.",
+        decision: "Only peers shown here are direct local trust decisions."
       },
       {
         id: "who-can-write",
         kicker: "Scenario 3",
-        title: "Who can write?",
-        body: "Bob filters appendable peers before the live demo, because read&append/ accepts peer writes."
+        title: "Who can write into Bob's inbox?",
+        problem: "Peer writes can change Bob's shared surface during a live demo.",
+        evidence: "Appendable filter isolates peers that can write to read&append/.",
+        decision: "Review these peers before allowing live collaboration."
       },
       {
         id: "inspect-carol",
         kicker: "Scenario 4",
-        title: "Inspect a project friend",
-        body: "Bob opens a task-level peer audit to see what that friend can read right now."
+        title: "Can Carol join the project without seeing personal notes?",
+        problem: "Bob wants Carol to see task files, but not personal/.",
+        evidence: "Carol's peer audit shows task/ visible while personal/ stays hidden.",
+        decision: "Safe for project collaboration; not a personal-data grant."
       },
       {
         id: "upgrade-trust",
         kicker: "Scenario 5",
-        title: "What if I upgrade trust?",
-        body: "Bob previews the next tier before editing agents.json, showing newly exposed paths only."
+        title: "Should Bob promote Carol to personal?",
+        problem: "A tier upgrade may expose private paths and ask context.",
+        evidence: "Preview lists newly exposed paths and ask chunk delta before agents.json changes.",
+        decision: "Do not promote unless the newly exposed personal paths are intended."
       }
     ];
     let selectedTier = "common";
@@ -929,7 +953,11 @@ APP_HTML = """<!doctype html>
           <div class="scenario-copy">
             <div class="scenario-kicker">${htmlEscape(scenario.kicker)}</div>
             <div class="scenario-title">${htmlEscape(scenario.title)}</div>
-            <div class="scenario-body">${htmlEscape(scenario.body)}</div>
+            <div class="scenario-lines">
+              <div><strong>Problem:</strong> ${htmlEscape(scenario.problem)}</div>
+              <div><strong>Evidence:</strong> ${htmlEscape(scenario.evidence)}</div>
+              <div><strong>Decision:</strong> ${htmlEscape(scenario.decision)}</div>
+            </div>
           </div>
           <button class="mini-button primary-mini" type="button" data-scenario-run="${htmlEscape(scenario.id)}">Run</button>
         </div>

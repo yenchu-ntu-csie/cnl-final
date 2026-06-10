@@ -1963,3 +1963,165 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git add logs/codex_iteration_log.md && git commit -m "Log scenario walkthrough publish details" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Purpose: publish this append-only record of the scenario walkthrough commit and push.
+
+## 2026-06-10 23:35 CST - Chinese Subtitled Demo Video Iteration
+
+### User-facing goal
+- The user reported the demo still appeared to be only 10 seconds and asked whether that was normal, and whether Chinese subtitles could be added. The quick demo length was confirmed as normal for the previous recorder output, then the recorder was changed to produce a longer Chinese-subtitled walkthrough.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `git status --short --branch`
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `sed -n '1,260p' script/record_share_audit_demo.py`
+  - `ls -lh demo/artifacts`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed clean branch state and previous demo metadata: H.264, `1366x768`, `8/1` fps, `10.625000` seconds.
+
+### Tool: `functions.apply_patch`
+- Path: `script/record_share_audit_demo.py`
+- Result: first large patch attempt failed because the docstring/context did not match. No file changes were applied by that failed attempt.
+
+### Tool: `functions.exec_command`
+- Command: `nl -ba script/record_share_audit_demo.py | sed -n '1,240p'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Read exact recorder line numbers before splitting the patch.
+
+### Tool: `functions.apply_patch`
+- Path: `script/record_share_audit_demo.py`
+- Result: updated the recorder to use large bottom-centered burned-in Chinese captions, generate a matching `.zh.srt` sidecar, and extend the scenario timeline to 42 seconds.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile script/record_share_audit_demo.py`
+  - `git diff -- script/record_share_audit_demo.py`
+  - `rg -n "demo|video|Scenario Walkthrough|Bob Scenario" README.md docs/share-audit-ui.md demo/DEMO.zh.md`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Recorder syntax check passed; inspected the diff and found `docs/share-audit-ui.md` as the right documentation target.
+
+### Tool: `functions.apply_patch`
+- Path: `docs/share-audit-ui.md`
+- Result: documented that `script/record_share_audit_demo.py` now generates the Chinese-subtitled MP4 and matching `demo/artifacts/share-audit-demo.zh.srt`.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server, headless Chrome, and ffmpeg video generation.
+- Result: exit 0. Generated `demo/artifacts/share-audit-demo.mp4`, `demo/artifacts/share-audit-demo.zh.srt`, and `336` frames.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `ls -lh demo/artifacts/share-audit-demo.mp4 demo/artifacts/share-audit-demo.zh.srt`
+  - `sed -n '1,80p' demo/artifacts/share-audit-demo.zh.srt`
+  - `ffmpeg -y -ss 00:00:03 -i demo/artifacts/share-audit-demo.mp4 -frames:v 1 /private/tmp/share-audit-demo-caption-check.png`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Verified new video metadata: H.264, `1366x768`, `8/1` fps, `42.000000` seconds. Verified subtitle file exists and contains six Chinese timed entries. Extracted a caption-check PNG frame.
+
+### Tool: `functions.view_image`
+- Path: `/private/tmp/share-audit-demo-caption-check.png`
+- Result: visually inspected the extracted frame. Chinese subtitles are burned into the MP4 frame and readable.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile script/record_share_audit_demo.py`
+  - `git status --short --branch`
+  - `git diff --stat`
+  - `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Final syntax and whitespace checks passed. Pending changes are the updated MP4, recorder script, docs, and new `.zh.srt` file.
+
+### Tool: `functions.exec_command`
+- Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Timestamped this log entry as `2026-06-10 23:35:56 CST`.
+
+### Planned final publish command for this iteration
+- Command: `git add demo/artifacts/share-audit-demo.mp4 demo/artifacts/share-audit-demo.zh.srt docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py && git diff --cached --stat && git diff --cached --check && git commit -m "Add Chinese subtitles to demo video" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish the longer Chinese-subtitled demo video, sidecar subtitle file, recorder changes, docs, and append-only log entry.
+
+## 2026-06-10 23:42 CST - Problem-Solving Scenario Correction
+
+### User-facing correction
+- The user clarified that the scenario walkthrough still did not provide examples that solve substantive problems. The UI and video captions were revised from feature walkthrough wording into concrete Bob-side decision examples with `Problem`, `Evidence`, and `Decision` text.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `git status --short --branch`
+  - `git diff --stat`
+  - `git diff --cached --stat`
+  - `git diff --check`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Confirmed the in-progress subtitle work was staged, with one unstaged SRT-writer fix in `script/record_share_audit_demo.py`.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `rg -n "SCENARIOS|scenario-item|scenario-body|my-computer|who-trust|who-can-write|inspect-carol|upgrade-trust|Scenario 1|Scenario 5" share_audit_server.py script/record_share_audit_demo.py test_share_audit_ui_browser.py docs/share-audit-ui.md`
+  - `sed -n '380,460p' share_audit_server.py`
+  - `sed -n '780,920p' share_audit_server.py`
+  - `sed -n '160,245p' script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Located scenario card styling, scenario data, browser assertions, docs, and Chinese caption text.
+
+### Tool: `functions.apply_patch`
+- Paths:
+  - `share_audit_server.py`
+  - `test_share_audit_ui_browser.py`
+  - `docs/share-audit-ui.md`
+  - `script/record_share_audit_demo.py`
+- Result: replaced abstract scenario wording with problem-solving cards and captions. Each card now renders `Problem`, `Evidence`, and `Decision`; browser tests now assert those labels and concrete problem titles.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m py_compile share_audit_server.py test_share_audit_ui_browser.py script/record_share_audit_demo.py`
+  - `git diff --stat`
+  - `git diff --check`
+  - `git diff -- share_audit_server.py docs/share-audit-ui.md test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Syntax and whitespace checks passed; reviewed the problem-solving scenario diff.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_ui_browser.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server and headless Chrome.
+- Result: exit 0. Real browser test passed. It verified Problem/Evidence/Decision text, all five scenario actions, content-free behavior, and mobile no-overflow. New screenshots were written under `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_wnqc4z9i/`.
+
+### Tool: `functions.view_image`
+- Path: `/var/folders/0w/klztrbjj7vqdp93n5jwzkdj00000gn/T/linkedout_ui_browser_wnqc4z9i/share-audit-self.png`
+- Result: visually inspected first viewport. Scenario cards now show concrete decision problems with Problem/Evidence/Decision text.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B script/record_share_audit_demo.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local dashboard server, headless Chrome, and ffmpeg.
+- Result: exit 0. Regenerated `demo/artifacts/share-audit-demo.mp4` and `demo/artifacts/share-audit-demo.zh.srt` with problem-solving Chinese captions, `336` frames.
+
+### Tool: `multi_tool_use.parallel`
+- Commands:
+  - `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,duration -of default=noprint_wrappers=1 demo/artifacts/share-audit-demo.mp4`
+  - `sed -n '1,80p' demo/artifacts/share-audit-demo.zh.srt`
+  - `git diff --check`
+  - `ffmpeg -y -ss 00:00:04 -i demo/artifacts/share-audit-demo.mp4 -frames:v 1 /private/tmp/share-audit-demo-problem-check.png`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0 for all commands. Verified video remains H.264, `1366x768`, `8/1` fps, `42.000000` seconds. SRT now describes substantive problems, evidence, and decisions. Extracted a frame for visual inspection.
+
+### Tool: `functions.view_image`
+- Path: `/private/tmp/share-audit-demo-problem-check.png`
+- Result: visually inspected burned-in Chinese captions; text now frames the demo as Bob's five substantive decision problems.
+
+### Tool: `functions.exec_command`
+- Command: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B test_share_audit_server.py`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for local loopback test server.
+- Result: exit 0. API/HTML tests passed after problem-solving scenario copy changes.
+
+### Tool: `functions.exec_command`
+- Command: `date '+%Y-%m-%d %H:%M:%S %Z'`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Timestamped this correction log as `2026-06-10 23:42:57 CST`.
+
+### Planned final publish command for this correction
+- Command: `git add demo/artifacts/share-audit-demo.mp4 demo/artifacts/share-audit-demo.zh.srt docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py share_audit_server.py test_share_audit_ui_browser.py && git diff --cached --stat && git diff --cached --check && git commit -m "Make audit scenarios solve concrete problems" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish the problem-solving scenario UI, updated Chinese video/SRT, tests, docs, and append-only log entry.

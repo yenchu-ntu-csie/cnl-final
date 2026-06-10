@@ -10,15 +10,23 @@ Open the printed `http://127.0.0.1:...` URL. The server is local by default and 
 
 ## Bob Scenario Walkthrough
 
-Use the scenario cards at the top of the dashboard when the raw audit controls are too abstract. Each card is a local preset over the same content-free audit APIs:
+Use the scenario cards at the top of the dashboard when the raw audit controls are too abstract. Each card is a concrete Bob-side decision problem with `Problem`, `Evidence`, and `Decision` text:
 
-- `My computer`: shows Bob's local self-audit and runs the common-tier audit.
-- `Who do I trust?`: loads every peer from Bob's local `agents.json` into the exposure matrix.
-- `Who can write?`: filters the matrix to peers with append access to `read&append/`.
-- `Inspect a project friend`: selects a task-level peer and runs that peer's current audit.
-- `What if I upgrade trust?`: previews the next trust tier before editing `agents.json`.
+- `Can Bob demo safely from this laptop?`: proves the audit is local and shows the common-tier exposure before starting a node.
+- `Who is actually in Bob's trust list?`: reads Bob's local `agents.json` and shows which peers are direct local trust decisions.
+- `Who can write into Bob's inbox?`: filters appendable peers so Bob can review live collaboration write risk.
+- `Can Carol join the project without seeing personal notes?`: inspects a task-level peer and verifies `task/` is visible while `personal/` stays hidden.
+- `Should Bob promote Carol to personal?`: previews newly exposed paths and ask-context delta before editing `agents.json`.
 
-The cards do not create a central scenario service and do not read note contents. They only set existing controls, call the existing local endpoints, and scroll to the relevant panel.
+The cards do not create a central scenario service and do not read note contents. They only set existing controls, call the existing local endpoints, and scroll to the evidence panel for that decision.
+
+The checked-in demo video is generated from these cards:
+
+```bash
+python3 script/record_share_audit_demo.py
+```
+
+It records a longer Chinese-subtitled walkthrough to `demo/artifacts/share-audit-demo.mp4` and writes a matching sidecar subtitle file at `demo/artifacts/share-audit-demo.zh.srt`.
 
 ## This Computer Self-Audit
 
