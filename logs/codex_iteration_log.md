@@ -1942,3 +1942,24 @@ Append-only log for the 2026-06-07 product iteration run. Live code is treated a
 - Command: `git add docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py demo/artifacts/share-audit-demo.mp4 && git diff --cached --stat && git diff --cached --check && git commit -m "Add scenario walkthrough to audit UI" && git push && git status --short --branch`
 - Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
 - Purpose: publish the scenario UI, tests, docs, updated demo video, and this append-only log entry.
+
+### Tool: `functions.exec_command`
+- Command: `git add docs/share-audit-ui.md logs/codex_iteration_log.md script/record_share_audit_demo.py share_audit_server.py test_share_audit_server.py test_share_audit_ui_browser.py demo/artifacts/share-audit-demo.mp4 && git diff --cached --stat && git diff --cached --check && git commit -m "Add scenario walkthrough to audit UI"`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 0. Created local commit `9b8c0f2` with the scenario walkthrough UI, docs, tests, updated scenario-driven demo video, and log entry.
+
+### Tool: `functions.exec_command`
+- Command: `git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Result: exit 128. Sandbox DNS failed with `Could not resolve hostname github.com`.
+
+### Tool: `functions.exec_command`
+- Command: `git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Escalation: requested and approved for GitHub network access after sandbox DNS failure.
+- Result: exit 0. Pushed `codex/ui-ux-10x-20260607` from `2e1d2dd` to `9b8c0f2` and confirmed clean tracking status.
+
+### Planned final publish command for this log-only update
+- Command: `git add logs/codex_iteration_log.md && git commit -m "Log scenario walkthrough publish details" && git push && git status --short --branch`
+- Workdir: `/Users/user0/code/CNLab/Final/cnl-final`
+- Purpose: publish this append-only record of the scenario walkthrough commit and push.
